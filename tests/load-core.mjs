@@ -9,7 +9,11 @@ export function loadCore() {
     const html = readFileSync(path.join(root, 'index.html'), 'utf8');
     const m = html.match(/<script id="core">([\s\S]*?)<\/script>/);
     if (!m) throw new Error('index.html: блок <script id="core"> не найден');
-    const context = vm.createContext({});
-    vm.runInContext(m[1] + '\n;AddrCore;', context, { filename: 'index.html#core' });
-    return vm.runInContext('AddrCore', context);
+    // Исполняем в текущем контексте (общие Array/Object с тестами), но внутри функции,
+    // чтобы не засорять глобальную область.
+    const factory = vm.runInThisContext(
+        '(function () {' + m[1] + '\n;return AddrCore; })',
+        { filename: 'index.html#core' }
+    );
+    return factory();
 }
