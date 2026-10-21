@@ -582,6 +582,13 @@ AddrCore.EXPORT_HEADERS = Object.freeze(['№', 'Исходный адрес', '
     'Населённый пункт', 'Улица и дом', 'Итоговый адрес', 'Координаты', 'Яндекс Карты', '2ГИС',
     'Статус', 'Точность', 'Проверка', 'Кандидаты']);
 
+// Что делать с HTTP-статусом ответа геокодера.
+AddrCore.decideOnHttpStatus = function (status) {
+    if (status === 200) return 'ok';
+    if (status === 403 || status === 429) return 'stop';
+    return 'retry';
+};
+
 AddrCore.recordToExportRow = function (rec, index) {
     return [index + 1, rec.original, rec.label, rec.district, rec.province, rec.locality,
         rec.streetAndHouse, rec.finalAddress, rec.coordinates, rec.yandexLink, rec.dgisLink,
@@ -689,7 +696,225 @@ function initShell() {
     $('loadedResetBtn').addEventListener('click', () => { App.items = []; showView('empty'); updateStartButton(); });
 }
 
-document.addEventListener('DOMContentLoaded', initShell);
+// ---- Обработка -------------------------------------------------------------
+
+const STATUS_CLASS = {
+    [AddrCore.STATUS.CONFIRMED]: 's-confirmed',
+    [AddrCore.STATUS.NO_CITY]: 's-nocity',
+    [AddrCore.STATUS.CITY_UNCONFIRMED]: 's-unconfirmed',
+    [AddrCore.STATUS.NO_HOUSE]: 's-nohouse',
+    [AddrCore.STATUS.ERROR]: 's-error'
+};
+const STATUS_ORDER = [AddrCore.STATUS.CONFIRMED, AddrCore.STATUS.NO_CITY, AddrCore.STATUS.CITY_UNCONFIRMED,
+    AddrCore.STATUS.NO_HOUSE, AddrCore.STATUS.ERROR];
+const RETRY_LIMIT = 3;
+const RETRY_PAUSE_MS = 500;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const escapeHtml = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+
+// Один адрес → {cands, cls} | {error} | 'stop' (ключ исчерпан/отклонён).
+async function geocodeOne(original) {
+    const query = AddrCore.cleanAddressForQuery(original) || original;
+    let lastError = 'нет ответа';
+    for (let attempt = 1; attempt <= RETRY_LIMIT; attempt++) {
+        try {
+            const resp = await fetch(AddrCore.buildGeocodeUrl(App.apiKey, query));
+            const decision = AddrCore.decideOnHttpStatus(resp.status);
+            if (decision === 'stop') return 'stop';
+            if (decision === 'ok') {
+                const json = await resp.json();
+                if (json && json.error) { lastError = json.error.message || 'ошибка API'; if (/limit|key|forbidden/i.test(lastError)) return 'stop'; }
+                else {
+                    const cands = AddrCore.parseGeocoderResponse(json);
+                    return { cands, cls: AddrCore.classify(original, cands) };
+                }
+            } else {
+                lastError = 'HTTP ' + resp.status;
+            }
+        } catch (e) {
+            lastError = (e && e.message) || 'сетевая ошибка';
+        }
+        if (attempt < RETRY_LIMIT) await sleep(RETRY_PAUSE_MS);
+    }
+    return { error: lastError };
+}
+
+function statusBadge(status) {
+    return `<span class="badge ${STATUS_CLASS[status] || ''}">${escapeHtml(status)}</span>`;
+}
+
+function renderRow(rec, i) {
+    const tbody = $('resultsBody');
+    let tr = tbody.querySelector(`tr[data-index="${i}"]`);
+    if (!tr) { tr = document.createElement('tr'); tr.dataset.index = String(i); tbody.appendChild(tr); }
+    tr.dataset.status = rec.status;
+    tr.innerHTML = `<td class="num">${i + 1}</td><td>${escapeHtml(rec.label)}</td><td class="orig">${escapeHtml(rec.original)}</td>` +
+        `<td>${escapeHtml(rec.district)}</td><td>${escapeHtml(rec.province)}</td><td>${escapeHtml(rec.locality)}</td>` +
+        `<td>${escapeHtml(rec.streetAndHouse)}</td><td class="nowrap">${escapeHtml(rec.coordinates)}</td>` +
+        `<td>${statusBadge(rec.status)}</td><td>${escapeHtml(rec.check)}</td>`;
+    $('resultsCard').style.display = '';
+    applyFilter();
+}
+
+function applyFilter() {
+    const want = $('statusFilter').value;
+    $('resultsBody').querySelectorAll('tr').forEach(tr => {
+        tr.style.display = (!want || tr.dataset.status === want) ? '' : 'none';
+    });
+}
+
+function countByStatus() {
+    const counts = {};
+    STATUS_ORDER.forEach(s => { counts[s] = 0; });
+    App.records.forEach(r => { if (r) counts[r.status] = (counts[r.status] || 0) + 1; });
+    return counts;
+}
+
+function renderStats() {
+    const counts = countByStatus();
+    $('statsBar').innerHTML = STATUS_ORDER.map(s =>
+        `<div class="stat"><div class="n">${counts[s]}</div><div class="t">${statusBadge(s)}</div></div>`).join('');
+}
+
+function renderProgress() {
+    const done = App.records.filter(Boolean).length, total = App.items.length;
+    const pct = total ? Math.round(done / total * 100) : 0;
+    $('processingCounter').textContent = `Обработано ${done} из ${total}`;
+    $('processingPct').textContent = pct + '%';
+    $('progressFill').style.width = pct + '%';
+    const cur = App.items[App.index];
+    $('processingCurrent').textContent = cur && App.running ? `Сейчас: ${cur.original.slice(0, 80)}` : '';
+}
+
+function pushFeed(rec, i) {
+    const feed = $('feed');
+    const row = document.createElement('div');
+    row.className = 'feed-row';
+    row.innerHTML = `<span>№${i + 1} · ${escapeHtml(rec.label ? rec.label + ', ' : '')}${escapeHtml(rec.original.slice(0, 60))}</span>${statusBadge(rec.status)}`;
+    feed.prepend(row);
+    while (feed.children.length > 5) feed.lastElementChild.remove();
+}
+
+function resetResultsView() {
+    $('resultsBody').innerHTML = '';
+    $('feed').innerHTML = '';
+    $('resultsCard').style.display = 'none';
+    $('statusFilter').value = '';
+}
+
+function startProcessing() {
+    if (!App.apiKey || !App.items.length) return;
+    App.records = new Array(App.items.length).fill(null);
+    App.index = 0;
+    App.exported = false;
+    resetResultsView();
+    App.running = true;
+    updateStartButton();
+    renderStats(); renderProgress();
+    showView('processing');
+    processNext();
+}
+
+// Нужна ли остановка на этой записи (режимы doubtful/manual; карточка — задача 7).
+function needsReview(rec) {
+    if (App.mode === 'manual') return true;
+    if (App.mode === 'doubtful') return rec.status !== AddrCore.STATUS.CONFIRMED;
+    return false;
+}
+
+async function processNext() {
+    while (App.running && App.index < App.items.length) {
+        const i = App.index;
+        const item = App.items[i];
+        renderProgress();
+        const result = await geocodeOne(item.original);
+        if (!App.running) break;                 // нажали «Остановить» во время запроса
+        if (result === 'stop') { showLimit(); return; }
+        const rec = result.error
+            ? AddrCore.buildRecord({ original: item.original, label: item.label, error: result.error })
+            : AddrCore.buildRecord({ original: item.original, label: item.label, cands: result.cands, cls: result.cls });
+        App.records[i] = rec;
+        renderRow(rec, i); pushFeed(rec, i); renderStats(); renderProgress();
+        App.index = i + 1;
+        if (needsReview(rec) && typeof openReview === 'function') { openReview(i, true); return; }
+    }
+    if (App.running || App.index >= App.items.length) finish();
+}
+
+function stopProcessing() {
+    App.running = false;
+    finish();
+}
+
+function showLimit() {
+    App.running = false;
+    const done = App.records.filter(Boolean).length;
+    $('limitInfo').textContent = `Уже обработано: ${done} из ${App.items.length}. Продолжить можно с адреса № ${App.index + 1}.`;
+    $('limitKeyInput').value = '';
+    showView('limit');
+    updateStartButton();
+}
+
+function continueAfterLimit() {
+    const key = $('limitKeyInput').value.trim();
+    if (key) { $('apiKeyInput').value = key; setApiKey(key); }
+    if (!App.apiKey) return;
+    App.running = true;
+    updateStartButton();
+    showView('processing');
+    processNext();
+}
+
+function finish() {
+    App.running = false;
+    updateStartButton();
+    const counts = countByStatus();
+    const done = App.records.filter(Boolean).length;
+    $('doneInfo').textContent = `Всего обработано: ${done} из ${App.items.length}`;
+    $('doneSummary').innerHTML = STATUS_ORDER.map(s => {
+        const pct = done ? Math.round(counts[s] / done * 100) : 0;
+        return `<div class="sum-row"><span>${statusBadge(s)}</span><span><b>${counts[s]}</b><span class="pct">${pct}%</span></span></div>`;
+    }).join('');
+    const doubtful = App.records.filter(r => r && r.status !== AddrCore.STATUS.CONFIRMED).length;
+    $('doubtfulBox').style.display = doubtful && typeof runDoubtful === 'function' ? '' : 'none';
+    $('doubtfulInfo').textContent = `${doubtful} ${plural(doubtful, 'адрес', 'адреса', 'адресов')} со статусом, отличным от «Подтверждён»`;
+    showView('done');
+}
+
+function exportXlsx() {
+    const rows = [AddrCore.EXPORT_HEADERS.slice()];
+    App.records.forEach((rec, i) => { if (rec) rows.push(AddrCore.recordToExportRow(rec, i)); });
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!cols'] = [5, 40, 18, 10, 25, 22, 35, 45, 24, 60, 60, 20, 26, 10, 40].map(w => ({ wch: w }));
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Адреса');
+    XLSX.writeFile(wb, `addresses_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    App.exported = true;
+}
+
+function resetAll() {
+    App.running = false;
+    App.records = []; App.index = 0; App.items = []; App.exported = false;
+    resetResultsView();
+    $('textInput').value = '';
+    showView('empty');
+    updateStartButton();
+}
+
+function initProcessing() {
+    $('startBtn').addEventListener('click', startProcessing);
+    $('stopBtn').addEventListener('click', stopProcessing);
+    $('exportBtn').addEventListener('click', exportXlsx);
+    $('limitExportBtn').addEventListener('click', exportXlsx);
+    $('limitContinueBtn').addEventListener('click', continueAfterLimit);
+    $('resetBtn').addEventListener('click', resetAll);
+    $('statusFilter').addEventListener('change', applyFilter);
+    window.addEventListener('beforeunload', e => {
+        if (App.records.some(Boolean) && !App.exported) { e.preventDefault(); e.returnValue = ''; }
+    });
+}
+
+document.addEventListener('DOMContentLoaded', () => { initShell(); initProcessing(); });
 </script>
 </body>
 </html>
