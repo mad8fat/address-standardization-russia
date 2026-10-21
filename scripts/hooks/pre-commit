@@ -1,2 +1,3 @@
 #!/bin/sh
-node scripts/check-clean.mjs || exit 1
+# Проверяет содержимое индекса (то, что уйдёт в коммит), а не рабочее дерево.
+node scripts/check-clean.mjs --staged || exit 1

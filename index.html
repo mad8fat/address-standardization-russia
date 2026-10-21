@@ -2,10 +2,10 @@
 <html lang="ru">
 <head>
     <meta charset="UTF-8">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:; font-src 'self'; connect-src 'self' https://geocode-maps.yandex.ru; base-uri 'none'; form-action 'none'; object-src 'none'">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Стандартизация адресов</title>
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <script src="vendor/xlsx.full.min.js"></script>
     <style>
         :root {
             --bg: #f3f5f9; --surface: #ffffff; --surface-2: #f8fafc; --border: #e2e8f0; --border-strong: #cbd5e1;
@@ -29,7 +29,7 @@
         }
         * { box-sizing: border-box; margin: 0; padding: 0; }
         html, body { height: 100%; }
-        body { font-family: 'Inter', -apple-system, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif; background: var(--bg); color: var(--text); font-size: 14px; line-height: 1.5; }
         a { color: var(--primary); }
         button { font: inherit; cursor: pointer; }
         input, select, textarea { font: inherit; color: inherit; }
@@ -222,7 +222,8 @@
                         <div class="hint">.xlsx, .xls</div>
                         <input type="file" id="fileInput" accept=".xlsx,.xls">
                     </label>
-                    <p class="hint">Колонка A — адрес, колонка B — метка (необязательно). Первую строку с заголовком можно оставить.</p>
+                    <p class="hint">Колонка A — адрес, колонка B — метка (необязательно). Заголовок «Адрес» в первой строке можно оставить. До 10 000 адресов, файл до 10 МБ.</p>
+                <p class="hint" id="loadBlockedHint" style="display:none;color:var(--err)">Пока идёт обработка, новые данные загрузить нельзя: остановите её или дождитесь конца.</p>
                 </div>
                 <div class="tab-panel" id="panelText">
                     <textarea class="textarea" id="textInput" placeholder="Один адрес на строку. Метка — через табуляцию.&#10;&#10;г. Казань, ул. Баумана, 58	Офис 1&#10;г. Москва, ул. Тверская, 10	Склад"></textarea>
@@ -288,8 +289,9 @@
                 </div>
                 <div class="row" style="gap:10px;flex-wrap:wrap">
                     <button class="btn btn-outline" id="limitExportBtn" type="button">Скачать текущие результаты</button>
-                    <input class="input" id="limitKeyInput" type="text" placeholder="Другой ключ API" style="flex:1;min-width:260px">
+                    <input class="input" id="newApiKeyInput" type="password" autocomplete="off" spellcheck="false" placeholder="Другой ключ API" style="flex:1;min-width:260px">
                     <button class="btn btn-primary" id="limitContinueBtn" type="button">Продолжить</button>
+                    <button class="btn btn-outline" id="limitResetBtn" type="button">Сбросить и начать заново</button>
                 </div>
             </div>
         </div>
@@ -303,12 +305,17 @@
                         <h4>Готово к скачиванию</h4>
                         <p style="font-size:13px;margin-bottom:12px">Excel-файл содержит все результаты с разобранными полями, координатами и ссылками на карты.</p>
                         <button class="btn btn-primary btn-block" id="exportBtn" type="button">Скачать Excel</button>
+                        <button class="btn btn-outline btn-block" id="continueBtn" type="button" style="margin-top:8px;display:none">Продолжить обработку</button>
                         <button class="btn btn-outline btn-block" id="resetBtn" type="button" style="margin-top:8px">Начать заново</button>
                     </div>
                 </div>
                 <div class="box" id="doubtfulBox" style="margin-top:4px;display:none">
                     <div class="row between"><div><b>Пройти вручную только сомнительные адреса</b><div class="hint" id="doubtfulInfo"></div></div>
                         <button class="btn btn-outline" id="doubtfulBtn" type="button">Начать проверку</button></div>
+                </div>
+                <div class="box" id="retryBox" style="margin-top:4px;display:none">
+                    <div class="row between"><div><b>Повторить адреса с ошибкой</b><div class="hint" id="retryInfo"></div></div>
+                        <button class="btn btn-outline" id="retryBtn" type="button">Повторить</button></div>
                 </div>
             </div></div>
         </div>
@@ -346,8 +353,12 @@ AddrCore.STOP_WORDS = new Set([
     'муниципальный', 'городской', 'городского', 'республика', 'край', 'автономный',
     'рабочий', 'типа', 'наб', 'набережная', 'бульвар', 'пл', 'площадь', 'проезд', 'тупик',
     'аллея', 'вн', 'тер', 'территория', 'снт', 'днт', 'влд', 'владение', 'им', 'имени',
-    'поселение', 'станица', 'хутор', 'аул', 'квартал', 'линия'
+    'поселение', 'станица', 'хутор', 'аул', 'квартал', 'линия', 'муниципальное', 'образование',
+    'городское', 'станция', 'федеральная'
 ]);
+
+// Длиннее этого адрес не бывает; защищает регулярки от гигантских ячеек.
+AddrCore.MAX_ADDRESS_LENGTH = 500;
 
 // Нормализованные значимые слова строки: нижний регистр, ё→е, длина ≥ 3, без слов-типов.
 AddrCore.tokenize = function (s) {
@@ -361,23 +372,35 @@ AddrCore.tokenize = function (s) {
 // Маркеры помещения: всё, что идёт от них и дальше, геокодеру не нужно.
 AddrCore.PREMISES_MARKER = /(^|[\s,;(])(пом|помещ|помещение|кв|офис|оф|этаж|литера|лит|вход|подъезд|а\/я|павильон)(?=\.|\s|$|№|\d)/i;
 
-// Строка для запроса: без пустых CSV-полей и без хвоста про помещения.
+// Сегмент состоит только из цифр, диапазонов и литер («33», «28-31», «12а») — продолжение списка помещений.
+AddrCore.NUMERIC_SEGMENT = /^[\d\s№\-–—/.,а-яa-z]{0,8}$/i;
+
+function trimTrailingSeparators(s) {
+    let end = s.length;
+    while (end > 0 && /[\s,;(\-–—]/.test(s[end - 1])) end--;
+    return s.slice(0, end);
+}
+
+// Строка для запроса: без пустых CSV-полей и без сегментов про помещения.
+// Сегмент с маркером обрезается, идущие за ним чисто номерные сегменты выбрасываются,
+// а сегменты со словами (например, город в конце строки) остаются.
 AddrCore.cleanAddressForQuery = function (raw) {
-    let segments = String(raw || '').split(',').map(x => x.trim()).filter(Boolean);
-    for (let i = 0; i < segments.length; i++) {
-        const m = segments[i].match(AddrCore.PREMISES_MARKER);
-        if (!m) continue;
-        const at = m.index + m[1].length;
-        if (at === 0) {
-            if (i === 0) { segments.splice(0, 1); i = -1; continue; } // маркер в самом начале — выкинуть сегмент
-            segments = segments.slice(0, i);
-        } else {
-            const head = segments[i].slice(0, at).replace(/[\s,;(\-–—]+$/, '');
-            segments = segments.slice(0, i).concat(head ? [head] : []);
+    const segments = String(raw || '').slice(0, AddrCore.MAX_ADDRESS_LENGTH).split(',').map(x => x.trim()).filter(Boolean);
+    const kept = [];
+    let dropNumeric = false;
+    for (const seg of segments) {
+        const m = seg.match(AddrCore.PREMISES_MARKER);
+        if (m) {
+            const head = trimTrailingSeparators(seg.slice(0, m.index + m[1].length));
+            if (head) kept.push(head);
+            dropNumeric = true;
+            continue;
         }
-        break;
+        if (dropNumeric && (AddrCore.NUMERIC_SEGMENT.test(seg) && /\d/.test(seg))) continue;
+        dropNumeric = false;
+        kept.push(seg);
     }
-    return segments.join(', ').replace(/\s+/g, ' ').trim();
+    return kept.join(', ').replace(/\s+/g, ' ').trim();
 };
 
 // Статусы результата. Строки показываются пользователю и попадают в выгрузку.
@@ -389,8 +412,10 @@ AddrCore.STATUS = Object.freeze({
     ERROR: 'Ошибка'
 });
 
-// Виды объектов, которые считаются «домом» (Яндекс отдаёт kind=other для домов с корпусом).
-AddrCore.HOUSE_KINDS = new Set(['house', 'other']);
+// Кандидат считается домом: kind=house, либо kind=other с номером дома (так Яндекс отдаёт дома с корпусом).
+AddrCore.isHouse = function (c) {
+    return !!c && (c.kind === 'house' || (c.kind === 'other' && !!c.house));
+};
 
 // Candidate: {kind, precision, text, province: string[], area, locality, street, house, lat, lon}
 AddrCore.parseGeocoderResponse = function (json) {
@@ -417,51 +442,76 @@ AddrCore.parseGeocoderResponse = function (json) {
     });
 };
 
+// Все значимые слова названия должны встретиться в наборе слов строки точно (без вхождений:
+// «пушкина» не подтверждает «Пушкин», «кирова» не подтверждает «Киров»).
 function tokensMatch(nameTokens, pool) {
-    return nameTokens.every(t => pool.some(x =>
-        t === x || (t.length >= 5 && (t.includes(x) || x.includes(t)))));
+    return nameTokens.every(t => pool.has(t));
+}
+
+// Слова исходной строки без слов названия улицы кандидата: улица не может подтверждать
+// город, район или регион («ул. Московская» ≠ Московская область, «ул. Чехова» ≠ Чехов).
+function anchorPool(input, c) {
+    const streetTokens = new Set(AddrCore.tokenize(c.street));
+    return new Set(AddrCore.tokenize(input).filter(t => !streetTokens.has(t)));
+}
+
+function levelMatches(level, c, pool) {
+    const names = level === 'province' ? (c.province || []) : [c[level]];
+    return names.some(name => { const toks = AddrCore.tokenize(name); return toks.length > 0 && tokensMatch(toks, pool); });
 }
 
 // На каком уровне исходная строка подтверждает кандидата: locality → area → province, иначе null.
 AddrCore.matchAnchor = function (input, c) {
-    const inputTokens = AddrCore.tokenize(input);
-    const streetTokens = new Set(AddrCore.tokenize(c.street));
-    const levels = [
-        ['locality', [c.locality], inputTokens],
-        ['area', [c.area], inputTokens],
-        // слова названия улицы не могут подтверждать регион («ул. Московская» ≠ Московская область)
-        ['province', c.province || [], inputTokens.filter(t => !streetTokens.has(t))]
-    ];
-    for (const [level, names, pool] of levels) {
-        for (const name of names) {
-            const toks = AddrCore.tokenize(name);
-            if (toks.length && tokensMatch(toks, pool)) return level;
-        }
+    const pool = anchorPool(input, c);
+    for (const level of ['locality', 'area', 'province']) {
+        if (levelMatches(level, c, pool)) return level;
     }
     return null;
 };
 
+function localityKey(c) { return (c.province || []).join('/') + '|' + (c.locality || ''); }
+
 // Сколько разных населённых пунктов среди кандидатов-домов.
 AddrCore.countDistinctLocalities = function (cands) {
     const keys = new Set();
-    for (const c of cands) {
-        if (!AddrCore.HOUSE_KINDS.has(c.kind)) continue;
-        keys.add((c.province || []).join('/') + '|' + (c.locality || ''));
-    }
+    for (const c of cands || []) if (AddrCore.isHouse(c)) keys.add(localityKey(c));
     return keys.size;
 };
 
+// Одноимённые населённые пункты в разных регионах среди кандидатов-домов (Киров Кировской и Калужской областей).
+function sameNameInOtherRegions(top, cands) {
+    const name = AddrCore.tokenize(top.locality).join(' ');
+    if (!name) return false;
+    const regions = new Set();
+    for (const c of cands) {
+        if (AddrCore.isHouse(c) && AddrCore.tokenize(c.locality).join(' ') === name) regions.add((c.province || []).join('/'));
+    }
+    return regions.size >= 2;
+}
+
 // Итог проверки одного адреса.
 AddrCore.classify = function (input, cands) {
-    const top = cands && cands.length ? cands[0] : null;
-    const candidateCount = AddrCore.countDistinctLocalities(cands || []);
-    if (!top || !AddrCore.HOUSE_KINDS.has(top.kind)) {
+    cands = cands || [];
+    const top = cands.length ? cands[0] : null;
+    const candidateCount = AddrCore.countDistinctLocalities(cands);
+    if (!AddrCore.isHouse(top)) {
         return { status: AddrCore.STATUS.NO_HOUSE, anchor: null, candidateCount, top };
     }
     const anchor = AddrCore.matchAnchor(input, top);
-    if (anchor) return { status: AddrCore.STATUS.CONFIRMED, anchor, candidateCount, top };
-    if (candidateCount >= 2) return { status: AddrCore.STATUS.NO_CITY, anchor, candidateCount, top };
-    return { status: AddrCore.STATUS.CITY_UNCONFIRMED, anchor, candidateCount, top };
+    const S = AddrCore.STATUS;
+    if (anchor === 'locality') {
+        // город назван, но таких городов несколько и регион в строке не указан
+        if (sameNameInOtherRegions(top, cands) && !levelMatches('province', top, anchorPool(input, top))) {
+            return { status: S.CITY_UNCONFIRMED, anchor, candidateCount, top };
+        }
+        return { status: S.CONFIRMED, anchor, candidateCount, top };
+    }
+    if (anchor) {
+        // в строке только район или регион: подтверждаем, если дом нашёлся в одном населённом пункте
+        return { status: candidateCount >= 2 ? S.NO_CITY : S.CONFIRMED, anchor, candidateCount, top };
+    }
+    if (candidateCount >= 2) return { status: S.NO_CITY, anchor, candidateCount, top };
+    return { status: S.CITY_UNCONFIRMED, anchor, candidateCount, top };
 };
 
 // ---- Входные данные -------------------------------------------------------
@@ -473,16 +523,22 @@ AddrCore.parseTextInput = function (text) {
         .map(line => line.split('\t').map(x => x.trim()));
 };
 
+// Заголовок колонки A: «Адрес», «Адреса», «адрес:», «Адрес доставки», «Исходный адрес».
+AddrCore.HEADER_CELL = /^(исходный\s+)?адрес(а)?(\s+[а-яё]+)?\s*:?$/i;
+
 // Строки (из SheetJS или parseTextInput) → записи. Пропускает заголовок и пустые адреса.
 AddrCore.parseInputRows = function (rows) {
     const items = [];
-    (rows || []).forEach((row, i) => {
-        const original = String((row && row[0]) ?? '').trim();
-        if (!original) return;
-        if (i === 0 && /^адрес\s*:?$/i.test(original)) return;
-        const label = String((row && row[1]) ?? '').trim();
+    let first = true;
+    for (const row of rows || []) {
+        let original = String((row && row[0]) ?? '').trim();
+        if (!original) continue;
+        if (first && AddrCore.HEADER_CELL.test(original)) { first = false; continue; }
+        first = false;
+        if (original.length > AddrCore.MAX_ADDRESS_LENGTH) original = original.slice(0, AddrCore.MAX_ADDRESS_LENGTH);
+        const label = String((row && row[1]) ?? '').trim().slice(0, AddrCore.MAX_ADDRESS_LENGTH);
         items.push({ original, label });
-    });
+    }
     return items;
 };
 
@@ -501,7 +557,7 @@ AddrCore.FEDERAL_DISTRICTS = Object.freeze({
 
 AddrCore.federalDistrict = function (province) {
     for (const name of province || []) {
-        if (AddrCore.FEDERAL_DISTRICTS[name]) return AddrCore.FEDERAL_DISTRICTS[name];
+        if (Object.hasOwn(AddrCore.FEDERAL_DISTRICTS, name)) return AddrCore.FEDERAL_DISTRICTS[name];
     }
     return '';
 };
@@ -514,7 +570,38 @@ AddrCore.PRECISION_LABELS = Object.freeze({
 });
 
 AddrCore.precisionLabel = function (p) {
-    return AddrCore.PRECISION_LABELS[p] || '';
+    return Object.hasOwn(AddrCore.PRECISION_LABELS, p) ? AddrCore.PRECISION_LABELS[p] : '';
+};
+
+// «55.7558, 37.6173», «55,7558; 37,6173», «55.7558 37.6173» → [lat, lon]; иначе null.
+AddrCore.parseCoords = function (s) {
+    const str = String(s || '').trim();
+    if (!str) return null;
+    let parts = str.split(/[\s,;]+/).filter(Boolean);
+    // «55,7558, 37,6173»: четыре целых группы без точек — десятичные запятые
+    if (parts.length === 4 && !str.includes('.') && parts.every(p => /^-?\d+$/.test(p))) {
+        parts = [parts[0] + '.' + parts[1], parts[2] + '.' + parts[3]];
+    }
+    if (parts.length !== 2) return null;
+    const [lat, lon] = parts.map(Number);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return null;
+    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    return [lat, lon];
+};
+
+AddrCore.exportFileName = function (date) {
+    const d = date || new Date();
+    const p = n => String(n).padStart(2, '0');
+    return `addresses_${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}.xlsx`;
+};
+
+// Сообщение об ошибке из ответа Яндекса: {statusCode, error, message} или {error: {message}}.
+AddrCore.apiErrorMessage = function (json) {
+    if (!json || typeof json !== 'object') return '';
+    if (typeof json.message === 'string' && (json.statusCode || json.error)) return json.message;
+    if (json.error && typeof json.error === 'object' && typeof json.error.message === 'string') return json.error.message;
+    if (typeof json.error === 'string') return json.error;
+    return '';
 };
 
 AddrCore.GEOCODER_URL = 'https://geocode-maps.yandex.ru/1.x/';
@@ -539,7 +626,7 @@ AddrCore.mapLinks = function (lat, lon, finalAddress) {
 //         streetAndHouse, finalAddress, lat, lon, coordinates, yandexLink, dgisLink, candidates, candidatesText
 AddrCore.emptyRecord = function (original, label) {
     return {
-        original: original || '', label: label || '', status: '', precision: '', check: 'авто',
+        original: original || '', label: label || '', status: '', precision: '', check: 'авто', error: '',
         district: '', province: '', locality: '', street: '', house: '', streetAndHouse: '',
         finalAddress: '', lat: NaN, lon: NaN, coordinates: '', yandexLink: '', dgisLink: '',
         candidates: [], candidatesText: ''
@@ -571,7 +658,7 @@ AddrCore.fillAddressFields = function (rec, f) {
 AddrCore.candidatesText = function (cands) {
     const seen = new Set();
     for (const c of cands || []) {
-        if (!AddrCore.HOUSE_KINDS.has(c.kind)) continue;
+        if (!AddrCore.isHouse(c)) continue;
         const name = c.locality || (c.province || []).slice(-1)[0] || '';
         if (name) seen.add(name);
     }
@@ -582,12 +669,18 @@ AddrCore.buildRecord = function ({ original, label, cands, cls, error }) {
     const rec = AddrCore.emptyRecord(original, label);
     if (error) {
         rec.status = AddrCore.STATUS.ERROR;
+        rec.error = String(error);
         return rec;
     }
     rec.status = cls.status;
     rec.candidates = (cands || []).slice();
     const top = cls.top;
-    if (top) {
+    const S = AddrCore.STATUS;
+    if (top && cls.status === S.NO_CITY) {
+        // город угадан геокодером: в запись идут только улица и дом из строки, город выбирает человек
+        AddrCore.fillAddressFields(rec, { street: top.street, house: top.house, lat: NaN, lon: NaN });
+        rec.finalAddress = '';
+    } else if (top) {
         rec.precision = AddrCore.precisionLabel(top.precision);
         AddrCore.fillAddressFields(rec, {
             district: AddrCore.federalDistrict(top.province),
@@ -596,7 +689,7 @@ AddrCore.buildRecord = function ({ original, label, cands, cls, error }) {
             lat: top.lat, lon: top.lon
         });
     }
-    if (cls.status === AddrCore.STATUS.NO_CITY || cls.status === AddrCore.STATUS.CITY_UNCONFIRMED) {
+    if (cls.status === S.NO_CITY || cls.status === S.CITY_UNCONFIRMED) {
         rec.candidatesText = AddrCore.candidatesText(cands);
     }
     return rec;
@@ -610,6 +703,7 @@ AddrCore.EXPORT_HEADERS = Object.freeze(['№', 'Исходный адрес', '
 AddrCore.decideOnHttpStatus = function (status) {
     if (status === 200) return 'ok';
     if (status === 403 || status === 429) return 'stop';
+    if (status >= 400 && status < 500) return 'fail';   // плохой запрос: повторять бессмысленно
     return 'retry';
 };
 
@@ -625,14 +719,40 @@ const App = {
     apiKey: '',
     mode: 'auto',          // auto | doubtful | manual
     items: [],             // {original, label}
-    records: [],           // Record из AddrCore.buildRecord
-    index: 0,
+    records: [],           // Record из AddrCore.buildRecord (null — ещё не обработан)
+    index: 0,              // следующий необработанный адрес при последовательном проходе
+    retry: [],             // очередь индексов на повторную обработку
     running: false,
+    runId: 0,              // номер запуска: старый цикл после «Остановить» не должен писать в состояние
     sourceName: '',
-    exported: false
+    exported: false,       // всё, что есть в records, уже выгружено
+    consecutiveErrors: 0
 };
+App.review = { index: -1, queue: null, queuePos: 0, fromLoop: false, selected: null, openedAt: 0, returnTo: 'done' };
+
 const KEY_STORAGE = 'addrstd.apiKey';
+const MAX_FILE_BYTES = 10 * 1024 * 1024;
+const MAX_ROWS = 10000;
+const REQUEST_TIMEOUT_MS = 20000;
+const RETRY_LIMIT = 3;
+const RETRY_PAUSE_MS = 500;
+const MAX_CONSECUTIVE_ERRORS = 5;
+const CLICK_GUARD_MS = 400;
 const $ = id => document.getElementById(id);
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const escapeHtml = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+
+const STATUS_CLASS = {
+    [AddrCore.STATUS.CONFIRMED]: 's-confirmed',
+    [AddrCore.STATUS.NO_CITY]: 's-nocity',
+    [AddrCore.STATUS.CITY_UNCONFIRMED]: 's-unconfirmed',
+    [AddrCore.STATUS.NO_HOUSE]: 's-nohouse',
+    [AddrCore.STATUS.ERROR]: 's-error'
+};
+const STATUS_ORDER = [AddrCore.STATUS.CONFIRMED, AddrCore.STATUS.NO_CITY, AddrCore.STATUS.CITY_UNCONFIRMED,
+    AddrCore.STATUS.NO_HOUSE, AddrCore.STATUS.ERROR];
+
+// ---- Виды и настройки ------------------------------------------------------
 
 function showView(name) {
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
@@ -651,13 +771,35 @@ function setApiKey(key) {
     updateStartButton();
 }
 
+// Обработка приостановлена с необработанным остатком (лимит или «Остановить»): продолжать, а не начинать заново.
+function hasPendingRemainder() {
+    return App.records.some(Boolean) && (App.index < App.items.length || App.retry.length > 0);
+}
+
 function updateStartButton() {
-    $('startBtn').disabled = !(App.apiKey && App.items.length > 0 && !App.running);
+    $('startBtn').disabled = !(App.apiKey && App.items.length > 0 && !App.running && !hasPendingRemainder());
+}
+
+function plural(n, one, few, many) {
+    const m10 = n % 10, m100 = n % 100;
+    if (m10 === 1 && m100 !== 11) return one;
+    if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
+    return many;
+}
+
+function loadingBlocked() {
+    const blocked = App.running;
+    $('loadBlockedHint').style.display = blocked ? '' : 'none';
+    return blocked;
 }
 
 function loadRows(rows, sourceName) {
-    App.items = AddrCore.parseInputRows(rows);
+    if (loadingBlocked()) return;
+    App.items = AddrCore.parseInputRows(rows).slice(0, MAX_ROWS);
     App.sourceName = sourceName;
+    App.records = []; App.index = 0; App.retry = []; App.exported = false;
+    App.review = { ...App.review, index: -1, queue: null, queuePos: 0, fromLoop: false, selected: null };
+    resetResultsView();
     if (!App.items.length) {
         $('loadedTitle').textContent = 'Адреса не найдены';
         $('loadedInfo').textContent = 'Проверьте, что адреса стоят в колонке A или по одному на строку.';
@@ -669,25 +811,32 @@ function loadRows(rows, sourceName) {
     updateStartButton();
 }
 
-function plural(n, one, few, many) {
-    const m10 = n % 10, m100 = n % 100;
-    if (m10 === 1 && m100 !== 11) return one;
-    if (m10 >= 2 && m10 <= 4 && (m100 < 10 || m100 >= 20)) return few;
-    return many;
+function showLoadError(title, text) {
+    App.items = [];
+    $('loadedTitle').textContent = title;
+    $('loadedInfo').textContent = text;
+    showView('loaded');
+    updateStartButton();
 }
 
 function readExcelFile(file) {
+    if (loadingBlocked()) return;
+    if (!/\.(xlsx|xls)$/i.test(file.name)) { showLoadError('Неподходящий файл', 'Нужен файл .xlsx или .xls.'); return; }
+    if (file.size > MAX_FILE_BYTES) { showLoadError('Файл слишком большой', 'Ограничение 10 МБ. Разбейте список на части.'); return; }
     const reader = new FileReader();
     reader.onload = e => {
         try {
-            const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array' });
+            // Читаем только первые MAX_ROWS строк и только колонки A:B — защита от «пустых» гигантских листов.
+            const wb = XLSX.read(new Uint8Array(e.target.result), { type: 'array', sheetRows: MAX_ROWS + 1, cellFormula: false, cellHTML: false });
             const ws = wb.Sheets[wb.SheetNames[0]];
-            const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' });
+            if (!ws || !ws['!ref']) { showLoadError('Лист пустой', 'В первом листе файла нет данных.'); return; }
+            const range = XLSX.utils.decode_range(ws['!ref']);
+            range.e.c = Math.min(range.e.c, 1);
+            range.e.r = Math.min(range.e.r, MAX_ROWS);
+            const rows = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '', range, blankrows: false });
             loadRows(rows, file.name);
         } catch (err) {
-            $('loadedTitle').textContent = 'Не удалось прочитать файл';
-            $('loadedInfo').textContent = String(err && err.message || err);
-            App.items = []; showView('loaded'); updateStartButton();
+            showLoadError('Не удалось прочитать файл', String(err && err.message || err));
         }
     };
     reader.readAsArrayBuffer(file);
@@ -727,19 +876,12 @@ function initShell() {
 
 // ---- Обработка -------------------------------------------------------------
 
-const STATUS_CLASS = {
-    [AddrCore.STATUS.CONFIRMED]: 's-confirmed',
-    [AddrCore.STATUS.NO_CITY]: 's-nocity',
-    [AddrCore.STATUS.CITY_UNCONFIRMED]: 's-unconfirmed',
-    [AddrCore.STATUS.NO_HOUSE]: 's-nohouse',
-    [AddrCore.STATUS.ERROR]: 's-error'
-};
-const STATUS_ORDER = [AddrCore.STATUS.CONFIRMED, AddrCore.STATUS.NO_CITY, AddrCore.STATUS.CITY_UNCONFIRMED,
-    AddrCore.STATUS.NO_HOUSE, AddrCore.STATUS.ERROR];
-const RETRY_LIMIT = 3;
-const RETRY_PAUSE_MS = 500;
-const sleep = ms => new Promise(r => setTimeout(r, ms));
-const escapeHtml = s => String(s ?? '').replace(/[&<>"']/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch]));
+async function fetchWithTimeout(url) {
+    const ctl = new AbortController();
+    const timer = setTimeout(() => ctl.abort(), REQUEST_TIMEOUT_MS);
+    try { return await fetch(url, { signal: ctl.signal }); }
+    finally { clearTimeout(timer); }
+}
 
 // Один адрес → {cands, cls} | {error} | 'stop' (ключ исчерпан/отклонён).
 async function geocodeOne(original) {
@@ -747,29 +889,31 @@ async function geocodeOne(original) {
     let lastError = 'нет ответа';
     for (let attempt = 1; attempt <= RETRY_LIMIT; attempt++) {
         try {
-            const resp = await fetch(AddrCore.buildGeocodeUrl(App.apiKey, query));
+            const resp = await fetchWithTimeout(AddrCore.buildGeocodeUrl(App.apiKey, query));
             const decision = AddrCore.decideOnHttpStatus(resp.status);
             if (decision === 'stop') return 'stop';
+            if (decision === 'fail') return { error: 'HTTP ' + resp.status };
             if (decision === 'ok') {
                 const json = await resp.json();
-                if (json && json.error) { lastError = json.error.message || 'ошибка API'; if (/limit|key|forbidden/i.test(lastError)) return 'stop'; }
-                else {
-                    const cands = AddrCore.parseGeocoderResponse(json);
-                    return { cands, cls: AddrCore.classify(original, cands) };
+                const apiError = AddrCore.apiErrorMessage(json);
+                if (apiError) {
+                    if (/limit|key|forbidden|unauthorized/i.test(apiError)) return 'stop';
+                    return { error: apiError };
                 }
-            } else {
-                lastError = 'HTTP ' + resp.status;
+                const cands = AddrCore.parseGeocoderResponse(json);
+                return { cands, cls: AddrCore.classify(original, cands) };
             }
+            lastError = 'HTTP ' + resp.status;
         } catch (e) {
-            lastError = (e && e.message) || 'сетевая ошибка';
+            lastError = e && e.name === 'AbortError' ? 'нет ответа за 20 с' : ((e && e.message) || 'сетевая ошибка');
         }
         if (attempt < RETRY_LIMIT) await sleep(RETRY_PAUSE_MS);
     }
     return { error: lastError };
 }
 
-function statusBadge(status) {
-    return `<span class="badge ${STATUS_CLASS[status] || ''}">${escapeHtml(status)}</span>`;
+function statusBadge(status, title) {
+    return `<span class="badge ${STATUS_CLASS[status] || ''}"${title ? ` title="${escapeHtml(title)}"` : ''}>${escapeHtml(status)}</span>`;
 }
 
 function renderRow(rec, i) {
@@ -780,9 +924,10 @@ function renderRow(rec, i) {
     tr.innerHTML = `<td class="num">${i + 1}</td><td>${escapeHtml(rec.label)}</td><td class="orig">${escapeHtml(rec.original)}</td>` +
         `<td>${escapeHtml(rec.district)}</td><td>${escapeHtml(rec.province)}</td><td>${escapeHtml(rec.locality)}</td>` +
         `<td>${escapeHtml(rec.streetAndHouse)}</td><td class="nowrap">${escapeHtml(rec.coordinates)}</td>` +
-        `<td>${statusBadge(rec.status)}</td><td>${escapeHtml(rec.check)}</td>`;
+        `<td>${statusBadge(rec.status, rec.error)}</td><td>${escapeHtml(rec.check)}</td>`;
+    const want = $('statusFilter').value;
+    tr.style.display = (!want || rec.status === want) ? '' : 'none';
     $('resultsCard').style.display = '';
-    applyFilter();
 }
 
 function applyFilter() {
@@ -805,13 +950,13 @@ function renderStats() {
         `<div class="stat ${STATUS_CLASS[s]}"><div class="n">${counts[s]}</div><div class="t">${statusBadge(s)}</div></div>`).join('');
 }
 
-function renderProgress() {
+function renderProgress(currentIndex) {
     const done = App.records.filter(Boolean).length, total = App.items.length;
     const pct = total ? Math.round(done / total * 100) : 0;
     $('processingCounter').textContent = `Обработано ${done} из ${total}`;
     $('processingPct').textContent = pct + '%';
     $('progressFill').style.width = pct + '%';
-    const cur = App.items[App.index];
+    const cur = currentIndex != null ? App.items[currentIndex] : null;
     $('processingCurrent').textContent = cur && App.running ? `Сейчас: ${cur.original.slice(0, 80)}` : '';
 }
 
@@ -819,7 +964,7 @@ function pushFeed(rec, i) {
     const feed = $('feed');
     const row = document.createElement('div');
     row.className = 'feed-row';
-    row.innerHTML = `<span>№${i + 1} · ${escapeHtml(rec.label ? rec.label + ', ' : '')}${escapeHtml(rec.original.slice(0, 60))}</span>${statusBadge(rec.status)}`;
+    row.innerHTML = `<span>№${i + 1} · ${escapeHtml(rec.label ? rec.label + ', ' : '')}${escapeHtml(rec.original.slice(0, 60))}</span>${statusBadge(rec.status, rec.error)}`;
     feed.prepend(row);
     while (feed.children.length > 5) feed.lastElementChild.remove();
 }
@@ -831,70 +976,96 @@ function resetResultsView() {
     $('statusFilter').value = '';
 }
 
-function startProcessing() {
-    if (!App.apiKey || !App.items.length) return;
-    App.records = new Array(App.items.length).fill(null);
-    App.index = 0;
+function storeRecord(i, rec) {
+    App.records[i] = rec;
     App.exported = false;
+    renderRow(rec, i); renderStats();
+}
+
+function startProcessing() {
+    if (!App.apiKey || !App.items.length || App.running || hasPendingRemainder()) return;
+    App.records = new Array(App.items.length).fill(null);
+    App.index = 0; App.retry = []; App.exported = false; App.consecutiveErrors = 0;
+    App.review = { ...App.review, index: -1, queue: null, queuePos: 0, fromLoop: false, selected: null };
     resetResultsView();
+    resumeProcessing();
+}
+
+function resumeProcessing() {
     App.running = true;
+    App.runId++;
+    App.consecutiveErrors = 0;
     updateStartButton();
     renderStats(); renderProgress();
     showView('processing');
-    processNext();
+    processNext(App.runId);
 }
 
-// Нужна ли остановка на этой записи (режимы doubtful/manual; карточка — задача 7).
+// Нужна ли остановка на этой записи (режимы doubtful/manual).
 function needsReview(rec) {
     if (App.mode === 'manual') return true;
     if (App.mode === 'doubtful') return rec.status !== AddrCore.STATUS.CONFIRMED;
     return false;
 }
 
-async function processNext() {
-    while (App.running && App.index < App.items.length) {
-        const i = App.index;
+// Следующий индекс: сначала очередь повторов, потом последовательный остаток; -1 — всё сделано.
+function nextIndex() {
+    if (App.retry.length) return { i: App.retry[0], fromRetry: true };
+    if (App.index < App.items.length) return { i: App.index, fromRetry: false };
+    return null;
+}
+
+async function processNext(run) {
+    while (App.running && run === App.runId) {
+        const next = nextIndex();
+        if (!next) break;
+        const { i, fromRetry } = next;
+        renderProgress(i);
+        const result = await geocodeOne(App.items[i].original);
+        if (run !== App.runId || !App.running) return;   // «Остановить» или новый запуск во время запроса
+        if (result === 'stop') { showLimit('limit'); return; }
         const item = App.items[i];
-        renderProgress();
-        const result = await geocodeOne(item.original);
-        if (!App.running) break;                 // нажали «Остановить» во время запроса
-        if (result === 'stop') { showLimit(); return; }
         const rec = result.error
             ? AddrCore.buildRecord({ original: item.original, label: item.label, error: result.error })
             : AddrCore.buildRecord({ original: item.original, label: item.label, cands: result.cands, cls: result.cls });
-        App.records[i] = rec;
-        renderRow(rec, i); pushFeed(rec, i); renderStats(); renderProgress();
-        App.index = i + 1;
-        if (needsReview(rec) && typeof openReview === 'function') { openReview(i, true); return; }
+        if (fromRetry) App.retry.shift(); else App.index = i + 1;
+        storeRecord(i, rec); pushFeed(rec, i); renderProgress(i);
+        App.consecutiveErrors = result.error ? App.consecutiveErrors + 1 : 0;
+        if (App.consecutiveErrors >= MAX_CONSECUTIVE_ERRORS) { showLimit('network'); return; }
+        if (needsReview(rec)) { openReview(i, true); return; }
     }
-    if (App.running || App.index >= App.items.length) finish();
+    if (run === App.runId) finish();
 }
 
 function stopProcessing() {
     App.running = false;
+    App.runId++;
     finish();
 }
 
-function showLimit() {
+function showLimit(kind) {
     App.running = false;
     const done = App.records.filter(Boolean).length;
-    $('limitInfo').textContent = `Уже обработано: ${done} из ${App.items.length}. Продолжить можно с адреса № ${App.index + 1}.`;
+    const remain = App.items.length - done;
+    const title = $('viewLimit').querySelector('h2');
+    title.textContent = kind === 'network' ? 'Запросы перестали проходить' : 'Лимит API исчерпан или ключ отклонён';
+    $('limitInfo').textContent = kind === 'network'
+        ? `Подряд ${MAX_CONSECUTIVE_ERRORS} адресов получили ошибку: похоже, нет сети или сервис недоступен. Обработано ${done} из ${App.items.length}, осталось ${remain}.`
+        : `Уже обработано: ${done} из ${App.items.length}. Продолжить можно с адреса № ${App.index + 1}.`;
     const pct = App.items.length ? Math.round(done / App.items.length * 100) : 0;
     $('limitPct').textContent = pct + '%';
     $('limitFill').style.width = pct + '%';
-    $('limitKeyInput').value = '';
+    $('newApiKeyInput').value = '';
     showView('limit');
     updateStartButton();
 }
 
 function continueAfterLimit() {
-    const key = $('limitKeyInput').value.trim();
+    const key = $('newApiKeyInput').value.trim();
     if (key) { $('apiKeyInput').value = key; setApiKey(key); }
+    $('newApiKeyInput').value = '';
     if (!App.apiKey) return;
-    App.running = true;
-    updateStartButton();
-    showView('processing');
-    processNext();
+    resumeProcessing();
 }
 
 function finish() {
@@ -902,15 +1073,29 @@ function finish() {
     updateStartButton();
     const counts = countByStatus();
     const done = App.records.filter(Boolean).length;
-    $('doneInfo').textContent = `Всего обработано: ${done} из ${App.items.length}`;
+    const remain = App.items.length - done;
+    $('doneInfo').textContent = remain > 0
+        ? `Обработано ${done} из ${App.items.length}, не обработано: ${remain}`
+        : `Всего обработано: ${done} из ${App.items.length}`;
     $('doneSummary').innerHTML = STATUS_ORDER.map(s => {
         const pct = done ? Math.round(counts[s] / done * 100) : 0;
         return `<div class="sum-row"><span>${statusBadge(s)}</span><span><b>${counts[s]}</b><span class="pct">${pct}%</span></span></div>`;
     }).join('');
+    $('continueBtn').style.display = remain > 0 && App.items.length ? '' : 'none';
     const doubtful = App.records.filter(r => r && r.status !== AddrCore.STATUS.CONFIRMED).length;
-    $('doubtfulBox').style.display = doubtful && typeof runDoubtful === 'function' ? '' : 'none';
+    $('doubtfulBox').style.display = doubtful ? '' : 'none';
     $('doubtfulInfo').textContent = `${doubtful} ${plural(doubtful, 'адрес', 'адреса', 'адресов')} со статусом, отличным от «Подтверждён»`;
+    const errors = counts[AddrCore.STATUS.ERROR];
+    $('retryBox').style.display = errors ? '' : 'none';
+    $('retryInfo').textContent = `${errors} ${plural(errors, 'адрес', 'адреса', 'адресов')} со статусом «Ошибка» будут запрошены заново`;
     showView('done');
+}
+
+function retryErrors() {
+    App.retry = [];
+    App.records.forEach((r, i) => { if (r && r.status === AddrCore.STATUS.ERROR) App.retry.push(i); });
+    if (!App.retry.length) return;
+    resumeProcessing();
 }
 
 function exportXlsx() {
@@ -920,35 +1105,51 @@ function exportXlsx() {
     ws['!cols'] = [5, 40, 18, 10, 25, 22, 35, 45, 24, 60, 60, 20, 26, 10, 40].map(w => ({ wch: w }));
     const wb = XLSX.utils.book_new();
     XLSX.utils.book_append_sheet(wb, ws, 'Адреса');
-    XLSX.writeFile(wb, `addresses_${new Date().toISOString().slice(0, 10)}.xlsx`);
+    XLSX.writeFile(wb, AddrCore.exportFileName());
     App.exported = true;
 }
 
 function resetAll() {
-    App.running = false;
-    App.records = []; App.index = 0; App.items = []; App.exported = false;
+    App.running = false; App.runId++;
+    App.records = []; App.index = 0; App.retry = []; App.items = []; App.exported = false;
+    App.review = { ...App.review, index: -1, queue: null, queuePos: 0, fromLoop: false, selected: null };
     resetResultsView();
     $('textInput').value = '';
+    loadingBlocked();
     showView('empty');
     updateStartButton();
 }
 
-// ---- Ручная проверка -------------------------------------------------------
+function initProcessing() {
+    $('startBtn').addEventListener('click', startProcessing);
+    $('stopBtn').addEventListener('click', stopProcessing);
+    $('exportBtn').addEventListener('click', exportXlsx);
+    $('limitExportBtn').addEventListener('click', exportXlsx);
+    $('limitContinueBtn').addEventListener('click', continueAfterLimit);
+    $('limitResetBtn').addEventListener('click', resetAll);
+    $('continueBtn').addEventListener('click', () => { if (App.apiKey) resumeProcessing(); });
+    $('retryBtn').addEventListener('click', retryErrors);
+    $('resetBtn').addEventListener('click', resetAll);
+    $('statusFilter').addEventListener('change', applyFilter);
+    window.addEventListener('beforeunload', e => {
+        if (App.records.some(Boolean) && !App.exported) { e.preventDefault(); e.returnValue = ''; }
+    });
+}
 
-App.review = { index: -1, queue: null, queuePos: 0, fromLoop: false, selected: null };
+// ---- Ручная проверка -------------------------------------------------------
 
 const REVIEW_HINTS = {
     [AddrCore.STATUS.NO_CITY]: n => `В исходной строке нет населённого пункта: такая улица и дом нашлись в ${n} ${plural(n, 'городе', 'городах', 'городах')}. Выберите подходящий вариант из списка или заполните поля вручную.`,
-    [AddrCore.STATUS.CITY_UNCONFIRMED]: () => 'Найден один вариант, но его населённый пункт не упоминается в исходной строке. Проверьте, тот ли это адрес.',
+    [AddrCore.STATUS.CITY_UNCONFIRMED]: () => 'Найден один вариант, но его населённый пункт не подтверждается исходной строкой. Проверьте, тот ли это адрес.',
     [AddrCore.STATUS.NO_HOUSE]: () => 'Геокодер не нашёл дом по этой строке. Заполните поля вручную или пропустите адрес.',
     [AddrCore.STATUS.CONFIRMED]: () => 'Адрес подтверждён автоматически. При необходимости поправьте поля.',
-    [AddrCore.STATUS.ERROR]: () => 'Запрос к геокодеру не удался. Заполните поля вручную или пропустите адрес.'
+    [AddrCore.STATUS.ERROR]: rec => `Запрос к геокодеру не удался${rec && rec.error ? ' (' + rec.error + ')' : ''}. Заполните поля вручную или пропустите адрес.`
 };
 
 function candidateRows(rec) {
     const seen = new Set();
     return rec.candidates.filter(c => {
-        if (!AddrCore.HOUSE_KINDS.has(c.kind)) return false;
+        if (!AddrCore.isHouse(c)) return false;
         const key = (c.province || []).join('/') + '|' + c.locality + '|' + c.street + '|' + c.house;
         if (seen.has(key)) return false;
         seen.add(key); return true;
@@ -958,15 +1159,20 @@ function candidateRows(rec) {
 function openReview(i, fromLoop) {
     const rec = App.records[i];
     if (!rec) return;
-    App.review.index = i; App.review.fromLoop = !!fromLoop; App.review.selected = null;
+    const r = App.review;
+    r.index = i; r.fromLoop = !!fromLoop; r.selected = null; r.openedAt = Date.now();
+    if (!fromLoop && !r.queue) r.returnTo = $('viewLimit').classList.contains('active') ? 'limit' : 'done';
     const total = App.items.length;
     const cands = candidateRows(rec);
-    const hint = (REVIEW_HINTS[rec.status] || (() => ''))(AddrCore.countDistinctLocalities(rec.candidates));
+    const hintFn = REVIEW_HINTS[rec.status] || (() => '');
+    const hint = rec.status === AddrCore.STATUS.ERROR ? hintFn(rec) : hintFn(AddrCore.countDistinctLocalities(rec.candidates));
     const districtOptions = ['', ...Object.values(AddrCore.FEDERAL_DISTRICTS)]
         .map(d => `<option value="${d}"${d === rec.district ? ' selected' : ''}>${d || 'Не указан'}</option>`).join('');
     $('viewReview').innerHTML = `
     <div class="card">
-        <div class="card-head"><h2>Ручная проверка</h2><span class="hint" id="reviewCounter">Адрес ${i + 1} из ${total}</span></div>
+        <div class="card-head"><h2>Ручная проверка</h2>
+            <div class="row"><span class="hint" id="reviewCounter">Адрес ${i + 1} из ${total}</span>
+                ${fromLoop ? '<button class="btn btn-stop" id="rvStop" type="button" title="Закончить обработку и перейти к итогам">■ Остановить</button>' : ''}</div></div>
         <div class="card-body review-grid">
             <div>
                 <div class="box"><h4>Исходная строка</h4><div id="reviewOriginal">${escapeHtml(rec.original)}</div></div>
@@ -974,7 +1180,7 @@ function openReview(i, fromLoop) {
                 ${cands.length ? `<h4 class="label">Кандидаты (${cands.length})</h4><ul class="cands" id="candList">` +
                     cands.map((c, k) => `<li data-k="${k}"><div><div class="c-main">${escapeHtml(c.locality || (c.province || []).slice(-1)[0] || '—')}</div>` +
                         `<div class="c-sub">${escapeHtml((c.province || []).slice(-1)[0] || '')}${c.street || c.house ? ' · ' + escapeHtml([c.street, c.house].filter(Boolean).join(', ')) : ''}` +
-                        `${AddrCore.precisionLabel(c.precision) ? ' · ' + AddrCore.precisionLabel(c.precision) : ''}</div></div></li>`).join('') + '</ul>' : ''}
+                        `${AddrCore.precisionLabel(c.precision) ? ' · ' + escapeHtml(AddrCore.precisionLabel(c.precision)) : ''}</div></div></li>`).join('') + '</ul>' : ''}
             </div>
             <div>
                 <div class="fields">
@@ -988,38 +1194,34 @@ function openReview(i, fromLoop) {
                     <div><label class="label">Точность</label><input class="input" id="rvPrecision" value="${escapeHtml(rec.precision)}" readonly></div>
                 </div>
                 <div class="links" id="rvLinks"></div>
+                <p class="hint" id="rvError" style="color:var(--err);display:none"></p>
                 <div class="actions">
                     <button class="btn btn-outline" id="rvSkip" type="button" title="Адрес попадёт в выгрузку с текущим статусом">Пропустить</button>
                     <button class="btn btn-primary" id="rvSave" type="button">Сохранить и дальше</button>
                 </div>
-                <p class="hint" style="text-align:right">«Пропустить» — адрес попадёт в выгрузку с текущим статусом.</p>
+                <p class="hint" style="text-align:right">«Пропустить» — адрес попадёт в выгрузку с текущим статусом. «Сохранить» — адрес станет «Подтверждён» с пометкой «вручную».</p>
             </div>
         </div>
     </div>`;
     renderReviewLinks();
-    $('rvCoords').addEventListener('input', renderReviewLinks);
-    $('rvLocality').addEventListener('input', renderReviewLinks);
+    ['rvCoords', 'rvLocality', 'rvStreet', 'rvHouse'].forEach(id => $(id).addEventListener('input', renderReviewLinks));
     if (cands.length) $('candList').addEventListener('click', e => {
         const li = e.target.closest('li[data-k]');
         if (li) applyCandidate(cands[Number(li.dataset.k)], li);
     });
     $('rvSave').addEventListener('click', saveReview);
     $('rvSkip').addEventListener('click', skipReview);
+    if (fromLoop) $('rvStop').addEventListener('click', stopProcessing);
     showView('review');
 }
 
 function renderReviewLinks() {
-    const [lat, lon] = parseCoords($('rvCoords').value);
+    const coords = AddrCore.parseCoords($('rvCoords').value);
     const el = $('rvLinks');
-    if (!Number.isFinite(lat) || !Number.isFinite(lon)) { el.innerHTML = '<span class="hint">Укажите координаты, чтобы открыть карту</span>'; return; }
+    if (!coords) { el.innerHTML = '<span class="hint">Укажите координаты (широта, долгота), чтобы открыть карту</span>'; return; }
     const addr = [$('rvLocality').value, $('rvStreet').value, $('rvHouse').value].filter(Boolean).join(', ');
-    const links = AddrCore.mapLinks(lat, lon, addr);
-    el.innerHTML = `<a href="${links.yandex}" target="_blank" rel="noopener">Открыть на Яндекс Картах</a><a href="${links.dgis}" target="_blank" rel="noopener">Открыть в 2ГИС</a>`;
-}
-
-function parseCoords(s) {
-    const m = String(s || '').split(/[,\s]+/).filter(Boolean).map(Number);
-    return m.length === 2 ? m : [NaN, NaN];
+    const links = AddrCore.mapLinks(coords[0], coords[1], addr);
+    el.innerHTML = `<a href="${links.yandex}" target="_blank" rel="noopener noreferrer">Открыть на Яндекс Картах</a><a href="${links.dgis}" target="_blank" rel="noopener noreferrer">Открыть в 2ГИС</a>`;
 }
 
 function applyCandidate(c, li) {
@@ -1035,34 +1237,60 @@ function applyCandidate(c, li) {
     renderReviewLinks();
 }
 
+function reviewClickGuard() {
+    // Двойной клик по «Сохранить»: второй клик пришёлся бы на кнопку следующей карточки.
+    return Date.now() - App.review.openedAt < CLICK_GUARD_MS;
+}
+
 function saveReview() {
+    if (reviewClickGuard()) return;
     const i = App.review.index, rec = App.records[i];
     if (!rec) return;
-    const [lat, lon] = parseCoords($('rvCoords').value);
+    const locality = $('rvLocality').value.trim();
+    const coordsText = $('rvCoords').value.trim();
+    const coords = AddrCore.parseCoords(coordsText);
+    const err = $('rvError');
+    if (!locality || !coords) {
+        err.textContent = !locality
+            ? 'Чтобы подтвердить адрес, укажите населённый пункт: выберите кандидата или заполните поле.'
+            : (coordsText ? 'Координаты не распознаны. Формат: «55.7558, 37.6173».' : 'Чтобы подтвердить адрес, укажите координаты или выберите кандидата.');
+        err.style.display = '';
+        return;
+    }
+    const fieldsChanged = locality !== rec.locality || $('rvStreet').value.trim() !== rec.street || $('rvHouse').value.trim() !== rec.house;
     rec.label = $('rvLabel').value.trim();
     AddrCore.fillAddressFields(rec, {
         district: $('rvDistrict').value, province: $('rvProvince').value.trim(),
-        locality: $('rvLocality').value.trim(), street: $('rvStreet').value.trim(), house: $('rvHouse').value.trim(),
-        lat, lon
+        locality, street: $('rvStreet').value.trim(), house: $('rvHouse').value.trim(),
+        lat: coords[0], lon: coords[1]
     });
-    rec.precision = App.review.selected ? AddrCore.precisionLabel(App.review.selected.precision) : $('rvPrecision').value;
+    rec.precision = App.review.selected ? AddrCore.precisionLabel(App.review.selected.precision) : (fieldsChanged ? '' : rec.precision);
     rec.status = AddrCore.STATUS.CONFIRMED;
     rec.check = 'вручную';
+    rec.error = '';
     rec.candidates = []; rec.candidatesText = '';
-    renderRow(rec, i); renderStats();
+    storeRecord(i, rec);
     reviewNext();
 }
 
-function skipReview() { reviewNext(); }
+function skipReview() {
+    if (reviewClickGuard()) return;
+    reviewNext();
+}
 
 function reviewNext() {
     const r = App.review;
+    if (r.fromLoop) {
+        r.fromLoop = false;
+        if (App.running) { showView('processing'); processNext(App.runId); return; }
+        finish(); return;
+    }
     if (r.queue) {
         r.queuePos++;
         if (r.queuePos < r.queue.length) { openReview(r.queue[r.queuePos], false); return; }
         r.queue = null; finish(); return;
     }
-    if (r.fromLoop && App.running) { showView('processing'); processNext(); return; }
+    if (r.returnTo === 'limit') { showView('limit'); return; }
     finish();
 }
 
@@ -1070,7 +1298,7 @@ function runDoubtful() {
     const queue = [];
     App.records.forEach((rec, i) => { if (rec && rec.status !== AddrCore.STATUS.CONFIRMED) queue.push(i); });
     if (!queue.length) return;
-    App.review.queue = queue; App.review.queuePos = 0;
+    App.review.queue = queue; App.review.queuePos = 0; App.review.returnTo = 'done';
     openReview(queue[0], false);
 }
 
@@ -1078,20 +1306,8 @@ function initReview() {
     $('doubtfulBtn').addEventListener('click', runDoubtful);
     $('resultsBody').addEventListener('click', e => {
         const tr = e.target.closest('tr[data-index]');
-        if (tr && !App.running) openReview(Number(tr.dataset.index), false);
-    });
-}
-
-function initProcessing() {
-    $('startBtn').addEventListener('click', startProcessing);
-    $('stopBtn').addEventListener('click', stopProcessing);
-    $('exportBtn').addEventListener('click', exportXlsx);
-    $('limitExportBtn').addEventListener('click', exportXlsx);
-    $('limitContinueBtn').addEventListener('click', continueAfterLimit);
-    $('resetBtn').addEventListener('click', resetAll);
-    $('statusFilter').addEventListener('change', applyFilter);
-    window.addEventListener('beforeunload', e => {
-        if (App.records.some(Boolean) && !App.exported) { e.preventDefault(); e.returnValue = ''; }
+        if (!tr || App.running || App.review.queue) return;          // во время обработки и прохода по очереди — нет
+        openReview(Number(tr.dataset.index), false);
     });
 }
 

@@ -1,0 +1,20 @@
+{
+ "response": {
+  "GeoObjectCollection": {
+   "metaDataProperty": {
+    "GeocoderResponseMetaData": {
+     "boundedBy": {
+      "Envelope": {
+       "lowerCorner": "19.6 41.076998",
+       "upperCorner": "179.999997 82.004232"
+      }
+     },
+     "request": "qwertyuiop12345",
+     "results": "10",
+     "found": "0"
+    }
+   },
+   "featureMember": []
+  }
+ }
+}

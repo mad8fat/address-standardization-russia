@@ -1,0 +1,104 @@
+{
+ "response": {
+  "GeoObjectCollection": {
+   "metaDataProperty": {
+    "GeocoderResponseMetaData": {
+     "boundedBy": {
+      "Envelope": {
+       "lowerCorner": "19.6 41.076998",
+       "upperCorner": "179.999997 82.004232"
+      }
+     },
+     "request": "Г. Екатеринбург, пр-кт Ленина, 24а",
+     "results": "10",
+     "found": "1"
+    }
+   },
+   "featureMember": [
+    {
+     "GeoObject": {
+      "metaDataProperty": {
+       "GeocoderMetaData": {
+        "precision": "exact",
+        "text": "Россия, Свердловская область, Екатеринбург, проспект Ленина, 24А",
+        "kind": "house",
+        "Address": {
+         "country_code": "RU",
+         "formatted": "Россия, Свердловская область, Екатеринбург, проспект Ленина, 24А",
+         "postal_code": "620014",
+         "Components": [
+          {
+           "kind": "country",
+           "name": "Россия"
+          },
+          {
+           "kind": "province",
+           "name": "Уральский федеральный округ"
+          },
+          {
+           "kind": "province",
+           "name": "Свердловская область"
+          },
+          {
+           "kind": "area",
+           "name": "муниципальное образование Екатеринбург"
+          },
+          {
+           "kind": "locality",
+           "name": "Екатеринбург"
+          },
+          {
+           "kind": "street",
+           "name": "проспект Ленина"
+          },
+          {
+           "kind": "house",
+           "name": "24А"
+          }
+         ]
+        },
+        "AddressDetails": {
+         "Country": {
+          "AddressLine": "Россия, Свердловская область, Екатеринбург, проспект Ленина, 24А",
+          "CountryNameCode": "RU",
+          "CountryName": "Россия",
+          "AdministrativeArea": {
+           "AdministrativeAreaName": "Свердловская область",
+           "SubAdministrativeArea": {
+            "SubAdministrativeAreaName": "муниципальное образование Екатеринбург",
+            "Locality": {
+             "LocalityName": "Екатеринбург",
+             "Thoroughfare": {
+              "ThoroughfareName": "проспект Ленина",
+              "Premise": {
+               "PremiseNumber": "24А",
+               "PostalCode": {
+                "PostalCodeNumber": "620014"
+               }
+              }
+             }
+            }
+           }
+          }
+         }
+        }
+       }
+      },
+      "name": "проспект Ленина, 24А",
+      "description": "Екатеринбург, Свердловская область, Россия",
+      "boundedBy": {
+       "Envelope": {
+        "lowerCorner": "60.593782 56.834988",
+        "upperCorner": "60.601993 56.839489"
+       }
+      },
+      "uri": "ymapsbm1://geo?data=Cgg1NjA4NjcxORJ00KDQvtGB0YHQuNGPLCDQodCy0LXRgNC00LvQvtCy0YHQutCw0Y8g0L7QsdC70LDRgdGC0YwsINCV0LrQsNGC0LXRgNC40L3QsdGD0YDQsywg0L_RgNC-0YHQv9C10LrRgiDQm9C10L3QuNC90LAsIDI00JAiCg09ZHJCFVVZY0I,",
+      "Point": {
+       "pos": "60.597888 56.837238"
+      }
+     }
+    }
+   ]
+  }
+ }
+}
