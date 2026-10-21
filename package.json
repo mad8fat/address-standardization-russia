@@ -1,0 +1,12 @@
+{
+  "name": "address-standardization-russia",
+  "version": "1.0.0",
+  "description": "Пакетная стандартизация российских адресов в браузере",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test tests/*.test.mjs",
+    "check": "node scripts/check-clean.mjs"
+  },
+  "license": "MIT"
+}
