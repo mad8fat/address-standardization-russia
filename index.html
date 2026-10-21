@@ -53,6 +53,90 @@ AddrCore.cleanAddressForQuery = function (raw) {
     }
     return segments.join(', ').replace(/\s+/g, ' ').trim();
 };
+
+// Статусы результата. Строки показываются пользователю и попадают в выгрузку.
+AddrCore.STATUS = Object.freeze({
+    CONFIRMED: 'Подтверждён',
+    NO_CITY: 'Город не указан',
+    CITY_UNCONFIRMED: 'Город не подтверждён',
+    NO_HOUSE: 'Дом не найден',
+    ERROR: 'Ошибка'
+});
+
+// Виды объектов, которые считаются «домом» (Яндекс отдаёт kind=other для домов с корпусом).
+AddrCore.HOUSE_KINDS = new Set(['house', 'other']);
+
+// Candidate: {kind, precision, text, province: string[], area, locality, street, house, lat, lon}
+AddrCore.parseGeocoderResponse = function (json) {
+    const members = (((json || {}).response || {}).GeoObjectCollection || {}).featureMember || [];
+    return members.map(m => {
+        const g = m.GeoObject || {};
+        const md = ((g.metaDataProperty || {}).GeocoderMetaData) || {};
+        const comps = ((md.Address || {}).Components) || [];
+        const c = { kind: md.kind || '', precision: md.precision || '', text: md.text || '',
+                    province: [], area: '', locality: '', street: '', house: '', lat: NaN, lon: NaN };
+        for (const comp of comps) {
+            switch (comp.kind) {
+                case 'province': c.province.push(comp.name); break;
+                case 'area': c.area = c.area || comp.name; break;
+                case 'locality': c.locality = comp.name; break;   // последний = самый конкретный
+                case 'street': c.street = comp.name; break;
+                case 'house': c.house = comp.name; break;
+            }
+        }
+        const pos = String(((g.Point || {}).pos) || '').split(' ');
+        c.lon = parseFloat(pos[0]);
+        c.lat = parseFloat(pos[1]);
+        return c;
+    });
+};
+
+function tokensMatch(nameTokens, pool) {
+    return nameTokens.every(t => pool.some(x =>
+        t === x || (t.length >= 5 && (t.includes(x) || x.includes(t)))));
+}
+
+// На каком уровне исходная строка подтверждает кандидата: locality → area → province, иначе null.
+AddrCore.matchAnchor = function (input, c) {
+    const inputTokens = AddrCore.tokenize(input);
+    const streetTokens = new Set(AddrCore.tokenize(c.street));
+    const levels = [
+        ['locality', [c.locality], inputTokens],
+        ['area', [c.area], inputTokens],
+        // слова названия улицы не могут подтверждать регион («ул. Московская» ≠ Московская область)
+        ['province', c.province || [], inputTokens.filter(t => !streetTokens.has(t))]
+    ];
+    for (const [level, names, pool] of levels) {
+        for (const name of names) {
+            const toks = AddrCore.tokenize(name);
+            if (toks.length && tokensMatch(toks, pool)) return level;
+        }
+    }
+    return null;
+};
+
+// Сколько разных населённых пунктов среди кандидатов-домов.
+AddrCore.countDistinctLocalities = function (cands) {
+    const keys = new Set();
+    for (const c of cands) {
+        if (!AddrCore.HOUSE_KINDS.has(c.kind)) continue;
+        keys.add((c.province || []).join('/') + '|' + (c.locality || ''));
+    }
+    return keys.size;
+};
+
+// Итог проверки одного адреса.
+AddrCore.classify = function (input, cands) {
+    const top = cands && cands.length ? cands[0] : null;
+    const candidateCount = AddrCore.countDistinctLocalities(cands || []);
+    if (!top || !AddrCore.HOUSE_KINDS.has(top.kind)) {
+        return { status: AddrCore.STATUS.NO_HOUSE, anchor: null, candidateCount, top };
+    }
+    const anchor = AddrCore.matchAnchor(input, top);
+    if (anchor) return { status: AddrCore.STATUS.CONFIRMED, anchor, candidateCount, top };
+    if (candidateCount >= 2) return { status: AddrCore.STATUS.NO_CITY, anchor, candidateCount, top };
+    return { status: AddrCore.STATUS.CITY_UNCONFIRMED, anchor, candidateCount, top };
+};
 </script>
 <script id="app">
 </script>
