@@ -901,6 +901,155 @@ function resetAll() {
     updateStartButton();
 }
 
+// ---- Ручная проверка -------------------------------------------------------
+
+App.review = { index: -1, queue: null, queuePos: 0, fromLoop: false, selected: null };
+
+const REVIEW_HINTS = {
+    [AddrCore.STATUS.NO_CITY]: n => `В исходной строке нет населённого пункта: такая улица и дом нашлись в ${n} ${plural(n, 'городе', 'городах', 'городах')}. Выберите подходящий вариант из списка или заполните поля вручную.`,
+    [AddrCore.STATUS.CITY_UNCONFIRMED]: () => 'Найден один вариант, но его населённый пункт не упоминается в исходной строке. Проверьте, тот ли это адрес.',
+    [AddrCore.STATUS.NO_HOUSE]: () => 'Геокодер не нашёл дом по этой строке. Заполните поля вручную или пропустите адрес.',
+    [AddrCore.STATUS.CONFIRMED]: () => 'Адрес подтверждён автоматически. При необходимости поправьте поля.',
+    [AddrCore.STATUS.ERROR]: () => 'Запрос к геокодеру не удался. Заполните поля вручную или пропустите адрес.'
+};
+
+function candidateRows(rec) {
+    const seen = new Set();
+    return rec.candidates.filter(c => {
+        if (!AddrCore.HOUSE_KINDS.has(c.kind)) return false;
+        const key = (c.province || []).join('/') + '|' + c.locality + '|' + c.street + '|' + c.house;
+        if (seen.has(key)) return false;
+        seen.add(key); return true;
+    });
+}
+
+function openReview(i, fromLoop) {
+    const rec = App.records[i];
+    if (!rec) return;
+    App.review.index = i; App.review.fromLoop = !!fromLoop; App.review.selected = null;
+    const total = App.items.length;
+    const cands = candidateRows(rec);
+    const hint = (REVIEW_HINTS[rec.status] || (() => ''))(AddrCore.countDistinctLocalities(rec.candidates));
+    const districtOptions = ['', ...Object.values(AddrCore.FEDERAL_DISTRICTS)]
+        .map(d => `<option value="${d}"${d === rec.district ? ' selected' : ''}>${d || 'Не указан'}</option>`).join('');
+    $('viewReview').innerHTML = `
+    <div class="card">
+        <div class="card-head"><h2>Ручная проверка</h2><span class="hint" id="reviewCounter">Адрес ${i + 1} из ${total}</span></div>
+        <div class="card-body review-grid">
+            <div>
+                <div class="box"><h4>Исходная строка</h4><div id="reviewOriginal">${escapeHtml(rec.original)}</div></div>
+                <div class="box note"><h4>Результат геокодера</h4><div style="margin-bottom:6px">${statusBadge(rec.status)}</div><div>${escapeHtml(hint)}</div></div>
+                ${cands.length ? `<h4 class="label">Кандидаты (${cands.length})</h4><ul class="cands" id="candList">` +
+                    cands.map((c, k) => `<li data-k="${k}"><div><div class="c-main">${escapeHtml(c.locality || (c.province || []).slice(-1)[0] || '—')}</div>` +
+                        `<div class="c-sub">${escapeHtml((c.province || []).slice(-1)[0] || '')}${c.street || c.house ? ' · ' + escapeHtml([c.street, c.house].filter(Boolean).join(', ')) : ''}` +
+                        `${AddrCore.precisionLabel(c.precision) ? ' · ' + AddrCore.precisionLabel(c.precision) : ''}</div></div></li>`).join('') + '</ul>' : ''}
+            </div>
+            <div>
+                <div class="fields">
+                    <div class="full"><label class="label">Метка</label><input class="input" id="rvLabel" value="${escapeHtml(rec.label)}"></div>
+                    <div><label class="label">Федеральный округ</label><select class="select" id="rvDistrict">${districtOptions}</select></div>
+                    <div><label class="label">Регион</label><input class="input" id="rvProvince" value="${escapeHtml(rec.province)}"></div>
+                    <div class="full"><label class="label">Населённый пункт</label><input class="input" id="rvLocality" value="${escapeHtml(rec.locality)}"></div>
+                    <div><label class="label">Улица</label><input class="input" id="rvStreet" value="${escapeHtml(rec.street)}"></div>
+                    <div><label class="label">Дом</label><input class="input" id="rvHouse" value="${escapeHtml(rec.house)}"></div>
+                    <div><label class="label">Координаты</label><input class="input" id="rvCoords" value="${escapeHtml(rec.coordinates)}" placeholder="55.7558, 37.6173"></div>
+                    <div><label class="label">Точность</label><input class="input" id="rvPrecision" value="${escapeHtml(rec.precision)}" readonly></div>
+                </div>
+                <div class="links" id="rvLinks"></div>
+                <div class="actions">
+                    <button class="btn btn-outline" id="rvSkip" type="button" title="Адрес попадёт в выгрузку с текущим статусом">Пропустить</button>
+                    <button class="btn btn-primary" id="rvSave" type="button">Сохранить и дальше</button>
+                </div>
+                <p class="hint" style="text-align:right">«Пропустить» — адрес попадёт в выгрузку с текущим статусом.</p>
+            </div>
+        </div>
+    </div>`;
+    renderReviewLinks();
+    $('rvCoords').addEventListener('input', renderReviewLinks);
+    $('rvLocality').addEventListener('input', renderReviewLinks);
+    if (cands.length) $('candList').addEventListener('click', e => {
+        const li = e.target.closest('li[data-k]');
+        if (li) applyCandidate(cands[Number(li.dataset.k)], li);
+    });
+    $('rvSave').addEventListener('click', saveReview);
+    $('rvSkip').addEventListener('click', skipReview);
+    showView('review');
+}
+
+function renderReviewLinks() {
+    const [lat, lon] = parseCoords($('rvCoords').value);
+    const el = $('rvLinks');
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) { el.innerHTML = '<span class="hint">Укажите координаты, чтобы открыть карту</span>'; return; }
+    const addr = [$('rvLocality').value, $('rvStreet').value, $('rvHouse').value].filter(Boolean).join(', ');
+    const links = AddrCore.mapLinks(lat, lon, addr);
+    el.innerHTML = `<a href="${links.yandex}" target="_blank" rel="noopener">Открыть на Яндекс Картах</a><a href="${links.dgis}" target="_blank" rel="noopener">Открыть в 2ГИС</a>`;
+}
+
+function parseCoords(s) {
+    const m = String(s || '').split(/[,\s]+/).filter(Boolean).map(Number);
+    return m.length === 2 ? m : [NaN, NaN];
+}
+
+function applyCandidate(c, li) {
+    App.review.selected = c;
+    document.querySelectorAll('#candList li').forEach(x => x.classList.toggle('selected', x === li));
+    $('rvDistrict').value = AddrCore.federalDistrict(c.province);
+    $('rvProvince').value = (c.province || []).slice(-1)[0] || '';
+    $('rvLocality').value = c.locality || '';
+    $('rvStreet').value = c.street || '';
+    $('rvHouse').value = c.house || '';
+    $('rvCoords').value = Number.isFinite(c.lat) && Number.isFinite(c.lon) ? `${c.lat}, ${c.lon}` : '';
+    $('rvPrecision').value = AddrCore.precisionLabel(c.precision);
+    renderReviewLinks();
+}
+
+function saveReview() {
+    const i = App.review.index, rec = App.records[i];
+    if (!rec) return;
+    const [lat, lon] = parseCoords($('rvCoords').value);
+    rec.label = $('rvLabel').value.trim();
+    AddrCore.fillAddressFields(rec, {
+        district: $('rvDistrict').value, province: $('rvProvince').value.trim(),
+        locality: $('rvLocality').value.trim(), street: $('rvStreet').value.trim(), house: $('rvHouse').value.trim(),
+        lat, lon
+    });
+    rec.precision = App.review.selected ? AddrCore.precisionLabel(App.review.selected.precision) : $('rvPrecision').value;
+    rec.status = AddrCore.STATUS.CONFIRMED;
+    rec.check = 'вручную';
+    rec.candidates = []; rec.candidatesText = '';
+    renderRow(rec, i); renderStats();
+    reviewNext();
+}
+
+function skipReview() { reviewNext(); }
+
+function reviewNext() {
+    const r = App.review;
+    if (r.queue) {
+        r.queuePos++;
+        if (r.queuePos < r.queue.length) { openReview(r.queue[r.queuePos], false); return; }
+        r.queue = null; finish(); return;
+    }
+    if (r.fromLoop && App.running) { showView('processing'); processNext(); return; }
+    finish();
+}
+
+function runDoubtful() {
+    const queue = [];
+    App.records.forEach((rec, i) => { if (rec && rec.status !== AddrCore.STATUS.CONFIRMED) queue.push(i); });
+    if (!queue.length) return;
+    App.review.queue = queue; App.review.queuePos = 0;
+    openReview(queue[0], false);
+}
+
+function initReview() {
+    $('doubtfulBtn').addEventListener('click', runDoubtful);
+    $('resultsBody').addEventListener('click', e => {
+        const tr = e.target.closest('tr[data-index]');
+        if (tr && !App.running) openReview(Number(tr.dataset.index), false);
+    });
+}
+
 function initProcessing() {
     $('startBtn').addEventListener('click', startProcessing);
     $('stopBtn').addEventListener('click', stopProcessing);
@@ -914,7 +1063,7 @@ function initProcessing() {
     });
 }
 
-document.addEventListener('DOMContentLoaded', () => { initShell(); initProcessing(); });
+document.addEventListener('DOMContentLoaded', () => { initShell(); initProcessing(); initReview(); });
 </script>
 </body>
 </html>
