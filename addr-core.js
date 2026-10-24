@@ -50,7 +50,7 @@ AddrCore.CITY_ABBREVIATIONS = [
 // Типографские тире и дефисы (U+2010–U+2015, минус U+2212) приводятся к обычному дефису, чтобы
 // «Ростов–на–Дону» с коротким тире раскрывался и считался составным названием, как с дефисом.
 AddrCore.expandCityAbbreviations = function (s) {
-    let out = String(s || '').replace(/[‐-―−]/g, '-');
+    let out = String(s || '').replace(/[\u2010-\u2015\u2212]/g, '-');
     for (const { re, full } of AddrCore.CITY_ABBREVIATIONS) out = out.replace(re, full);
     return out;
 };
