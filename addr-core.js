@@ -56,6 +56,9 @@ AddrCore.expandCityAbbreviations = function (s) {
 // Маркеры помещения: всё, что идёт от них и дальше, геокодеру не нужно.
 AddrCore.PREMISES_MARKER = /(^|[\s,;(])(пом|помещ|помещение|кв|офис|оф|этаж|литера|лит|вход|подъезд|а\/я|павильон)(?=\.|\s|$|№|\d)/i;
 
+// Маркер дома/корпуса/строения: если он стоит правее «кв», то «кв» — это квартал, а не квартира.
+AddrCore.HOUSE_MARKER = /(^|[\s,;])(д|дом|влд|стр|корп)(?=\.|\s|№|\d)/i;
+
 // Сегмент состоит только из цифр, диапазонов и литер («33», «28-31», «12а») — продолжение списка помещений.
 AddrCore.NUMERIC_SEGMENT = /^[\d\s№\-–—/.,а-яa-z]{0,8}$/i;
 
@@ -73,9 +76,18 @@ AddrCore.cleanAddressForQuery = function (raw) {
     const segments = raw.split(',').map(x => x.trim()).filter(Boolean);
     const kept = [];
     let dropNumeric = false;
-    for (const seg of segments) {
+    for (const [i, seg] of segments.entries()) {
         const m = seg.match(AddrCore.PREMISES_MARKER);
         if (m) {
+            if (m[2].toLowerCase() === 'кв') {
+                // «кв. 84, д. 5»: маркер дома правее — это квартал, сегмент сохраняем целиком.
+                const right = [seg.slice(m.index + m[0].length), ...segments.slice(i + 1)].join(',');
+                if (AddrCore.HOUSE_MARKER.test(right)) {
+                    kept.push(seg);
+                    dropNumeric = false;
+                    continue;
+                }
+            }
             const head = trimTrailingSeparators(seg.slice(0, m.index + m[1].length));
             if (head) kept.push(head);
             dropNumeric = true;
