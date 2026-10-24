@@ -34,3 +34,9 @@ test('expandCityAbbreviations expands known city abbreviations at word boundarie
 test('cleanAddressForQuery expands abbreviations before anything else', () => {
     assert.equal(core.cleanAddressForQuery('СПб, Невский пр., 28, оф. 5'), 'Санкт-Петербург, Невский пр., 28');
 });
+
+test('expandCityAbbreviations turns typographic dashes into a hyphen', () => {
+    assert.equal(core.expandCityAbbreviations('Ростов\u2013на\u2013Дону'), 'Ростов-на-Дону');   // короткое тире
+    assert.equal(core.expandCityAbbreviations('Комсомольск\u2011на\u2011Амуре'), 'Комсомольск-на-Амуре');
+    assert.equal(core.expandCityAbbreviations('a\u2010b\u2012c\u2014d\u2015e\u2212f'), 'a-b-c-d-e-f');
+});

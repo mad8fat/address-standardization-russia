@@ -213,6 +213,30 @@
         "anchor": null,
         "reordered": false
       }
+    },
+    {
+      "input": "Комсомольск‑на‑Амуре, пр. Ленина, 1",
+      "candidates": [
+        {
+          "kind": "house",
+          "precision": "exact",
+          "text": "",
+          "province": [
+            "Центральный федеральный округ",
+            "Ивановская область"
+          ],
+          "area": "",
+          "locality": "Комсомольск",
+          "street": "проспект Ленина",
+          "house": "1",
+          "lat": 55,
+          "lon": 37
+        }
+      ],
+      "expected": {
+        "status": "Город не подтверждён",
+        "anchor": null
+      }
     }
   ]
 }
