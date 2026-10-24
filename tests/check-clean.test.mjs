@@ -88,3 +88,35 @@ test('check-clean rejects a corrupted xlsx instead of crashing', () => {
         assert.match(r.stdout, /tmp-broken\.xlsx.*zip-unreadable/);
     } finally { unlinkSync(planted); }
 });
+
+// Минимальный zip с одним несжатым вхождением (CRC читатель не проверяет).
+function storedZip(name, text) {
+    const nameBuf = Buffer.from(name, 'utf8');
+    const data = Buffer.from(text, 'utf8');
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(nameBuf.length, 26);
+    const central = Buffer.alloc(46);
+    central.writeUInt32LE(0x02014b50, 0);
+    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(data.length, 24);
+    central.writeUInt16LE(nameBuf.length, 28);
+    const cdOffset = local.length + nameBuf.length + data.length;
+    const eocd = Buffer.alloc(22);
+    eocd.writeUInt32LE(0x06054b50, 0);
+    eocd.writeUInt16LE(1, 8);
+    eocd.writeUInt16LE(1, 10);
+    eocd.writeUInt32LE(central.length + nameBuf.length, 12);
+    eocd.writeUInt32LE(cdOffset, 16);
+    return Buffer.concat([local, nameBuf, data, central, nameBuf, eocd]);
+}
+
+test('zipTextEntries reads xml entries regardless of name case', async () => {
+    const { zipTextEntries } = await import('../scripts/zip-text.mjs');
+    const entries = zipTextEntries(storedZip('word/DOCUMENT.XML', '<w>текст</w>'));
+    assert.deepEqual(entries, [{ name: 'word/DOCUMENT.XML', text: '<w>текст</w>' }]);
+    assert.equal(zipTextEntries(storedZip('_rels/.RELS', '<r/>')).length, 1);
+    assert.equal(zipTextEntries(storedZip('media/image.png', 'png')).length, 0);
+});

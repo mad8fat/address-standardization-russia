@@ -24,7 +24,7 @@ export function zipTextEntries(buf, opts = {}) {
         const local = buf.readUInt32LE(pos + 42);
         const name = buf.toString('utf8', pos + 46, pos + 46 + nameLen);
         pos += 46 + nameLen + extraLen + commentLen;
-        if (!/\.(xml|rels)$/.test(name)) continue;
+        if (!/\.(xml|rels)$/i.test(name)) continue;
         if (usize > maxEntryBytes || (method !== 0 && method !== 8)) continue;
         if (buf.readUInt32LE(local) !== 0x04034b50) throw new Error('bad local header');
         // размеры берём из центрального каталога: в локальном заголовке они могут быть нулевыми
