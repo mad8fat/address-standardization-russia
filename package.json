@@ -1,12 +1,16 @@
 {
   "name": "address-standardization-russia",
-  "version": "1.0.0",
-  "description": "Пакетная стандартизация российских адресов в браузере",
-  "private": true,
-  "type": "module",
+  "version": "1.1.0",
+  "description": "Нормализация российских адресов через Яндекс Геокодер с честными статусами: ядро без зависимостей для браузера и Node",
+  "main": "addr-core.js",
+  "files": ["addr-core.js", "README.md", "LICENSE", "docs/algorithm.md"],
   "scripts": {
     "test": "node --test tests/*.test.mjs",
     "check": "node scripts/check-clean.mjs"
   },
+  "repository": {"type": "git", "url": "git+https://github.com/mad8fat/address-standardization-russia.git"},
+  "homepage": "https://mad8fat.github.io/address-standardization-russia/",
+  "keywords": ["geocoder", "address", "normalization", "russia", "yandex", "геокодер", "адрес", "нормализация"],
+  "engines": {"node": ">=18"},
   "license": "MIT"
 }
