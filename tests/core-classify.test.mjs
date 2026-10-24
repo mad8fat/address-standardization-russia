@@ -143,3 +143,27 @@ test('numeric hyphenated tokens and ordinary confirmed addresses are unaffected'
     assert.equal(core.classify('г. Москва, ул. Тверская, 10-12', [msk]).status, S().CONFIRMED);
     assert.equal(core.classify('г. Москва, ул. Тверская, 10-12', [msk]).reordered, false);
 });
+
+const HMAO = () => house('Ханты-Мансийск', ['Уральский федеральный округ', 'Ханты-Мансийский автономный округ — Югра'], 'улица Мира', '1');
+const ELIZOVO = () => house('Елизово', ['Дальневосточный федеральный округ', 'Камчатский край'], 'улица Ленина', '1');
+const GATCHINA = () => house('Гатчина', ['Северо-Западный федеральный округ', 'Ленинградская область'], 'улица Римского-Корсакова', '5');
+
+test('a word counts if it stands alone or sits in a compound the name covers wholly', () => {
+    const hmao = core.classify('Ханты-Мансийский автономный округ - Югра, г. Ханты-Мансийск, ул. Мира, 1', [HMAO()]);
+    assert.equal(hmao.status, S().CONFIRMED);
+    assert.equal(hmao.anchor, 'locality');
+    const msk = core.classify('г. Москва, Москва-Сити, Пресненская наб., 12', [house('Москва', ['Центральный федеральный округ', 'Москва'], 'Пресненская набережная', '12')]);
+    assert.equal(msk.status, S().CONFIRMED);
+    assert.equal(msk.anchor, 'locality');
+    const orekhovo = house('Орехово', ['Центральный федеральный округ', 'Тверская область'], 'улица Ленина', '1');
+    assert.equal(core.classify('Орехово-Зуево, ул. Ленина, 1', [orekhovo]).status, S().CITY_UNCONFIRMED);
+});
+
+test('region-level anchoring needs every non-street compound of the input covered by the top', () => {
+    const kam = core.classify('Камчатский край, Петропавловск-Камчатский, ул. Ленина, 1', [ELIZOVO()]);
+    assert.equal(kam.status, S().CITY_UNCONFIRMED);
+    assert.equal(kam.anchor, null);
+    const len = core.classify('Ленинградская обл, ул. Римского-Корсакова, 5', [GATCHINA()]);
+    assert.equal(len.status, S().CONFIRMED);
+    assert.equal(len.anchor, 'province');
+});

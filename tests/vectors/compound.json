@@ -178,6 +178,102 @@
         "anchor": "locality",
         "reordered": false
       }
+    },
+    {
+      "input": "Ханты-Мансийский автономный округ - Югра, г. Ханты-Мансийск, ул. Мира, 1",
+      "candidates": [
+        {
+          "kind": "house",
+          "precision": "exact",
+          "text": "",
+          "province": [
+            "Уральский федеральный округ",
+            "Ханты-Мансийский автономный округ — Югра"
+          ],
+          "area": "",
+          "locality": "Ханты-Мансийск",
+          "street": "улица Мира",
+          "house": "1",
+          "lat": 55,
+          "lon": 37
+        }
+      ],
+      "expected": {
+        "status": "Подтверждён",
+        "anchor": "locality"
+      }
+    },
+    {
+      "input": "г. Москва, Москва-Сити, Пресненская наб., 12",
+      "candidates": [
+        {
+          "kind": "house",
+          "precision": "exact",
+          "text": "",
+          "province": [
+            "Центральный федеральный округ",
+            "Москва"
+          ],
+          "area": "",
+          "locality": "Москва",
+          "street": "Пресненская набережная",
+          "house": "12",
+          "lat": 55,
+          "lon": 37
+        }
+      ],
+      "expected": {
+        "status": "Подтверждён",
+        "anchor": "locality"
+      }
+    },
+    {
+      "input": "Камчатский край, Петропавловск-Камчатский, ул. Ленина, 1",
+      "candidates": [
+        {
+          "kind": "house",
+          "precision": "exact",
+          "text": "",
+          "province": [
+            "Дальневосточный федеральный округ",
+            "Камчатский край"
+          ],
+          "area": "",
+          "locality": "Елизово",
+          "street": "улица Ленина",
+          "house": "1",
+          "lat": 55,
+          "lon": 37
+        }
+      ],
+      "expected": {
+        "status": "Город не подтверждён",
+        "anchor": null
+      }
+    },
+    {
+      "input": "Ленинградская обл, ул. Римского-Корсакова, 5",
+      "candidates": [
+        {
+          "kind": "house",
+          "precision": "exact",
+          "text": "",
+          "province": [
+            "Северо-Западный федеральный округ",
+            "Ленинградская область"
+          ],
+          "area": "",
+          "locality": "Гатчина",
+          "street": "улица Римского-Корсакова",
+          "house": "5",
+          "lat": 55,
+          "lon": 37
+        }
+      ],
+      "expected": {
+        "status": "Подтверждён",
+        "anchor": "province"
+      }
     }
   ]
 }
