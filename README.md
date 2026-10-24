@@ -1,6 +1,6 @@
 # Стандартизация адресов
 
-> **EN.** A browser-only tool for batch normalization of Russian postal addresses. Load an Excel file or paste a list, run it through the Yandex Geocoder with your own API key, and get back an Excel file with parsed components, coordinates, map links and honest statuses. The key feature: it detects when the input address had no city and the geocoder silently picked one, instead of reporting such results as exact matches. The core is also published as a dependency-free npm package, `address-standardization-russia`, for browsers and Node, with a language-neutral algorithm description and test vectors for re-implementing it elsewhere.
+> **EN.** A browser-only tool for batch normalization of Russian postal addresses. Load an Excel file or paste a list, run it through the Yandex Geocoder with your own API key, and get back an Excel file with parsed components, coordinates, map links and honest statuses. The key feature: it detects when the input address had no city and the geocoder silently picked one, instead of reporting such results as exact matches. The core is also available as a dependency-free package, `address-standardization-russia`, installable straight from GitHub for browsers and Node, with a language-neutral algorithm description and test vectors for re-implementing it elsewhere.
 
 Инструмент для пакетной нормализации российских адресов. Работает целиком в браузере: без сервера, без установки, без передачи адресов кому-либо, кроме Яндекс Геокодера. Вы загружаете список «грязных» адресов и получаете Excel с регионом, населённым пунктом, улицей, домом, координатами и ссылками на карты.
 
@@ -141,7 +141,7 @@ Excel-файл (`.xlsx` или `.xls`, до 10 МБ, до 10 000 адресов)
 
 Механизм можно забрать тремя способами.
 
-**1. npm.** `npm install address-standardization-russia`. В пакете только `addr-core.js`, описание алгоритма, README и лицензия; зависимостей нет, нужен Node 18 или новее (в нём есть встроенный `fetch`). Пример:
+**1. Установка с GitHub.** `npm install github:mad8fat/address-standardization-russia#v1.1.0`. Пакет ставится прямо из репозитория по тегу релиза, в реестр npm он не выкладывался. В пакете только `addr-core.js`, описание алгоритма, README и лицензия; зависимостей нет, нужен Node 18 или новее (в нём есть встроенный `fetch`). Для браузера тот же файл отдаёт jsDelivr: `https://cdn.jsdelivr.net/gh/mad8fat/address-standardization-russia@v1.1.0/addr-core.js`. Пример для Node:
 
 ```js
 const AddrCore = require('address-standardization-russia');
@@ -201,7 +201,7 @@ npm run check                     # проверка рабочего дерев
 node scripts/check-clean.mjs --staged   # то же для индекса (так работает pre-commit)
 git config core.hooksPath scripts/hooks # включить хук после клонирования
 python scripts/make_sample.py     # пересобрать examples/sample.xlsx
-npm pack --dry-run                # показать, что попадёт в npm-пакет
+npm pack --dry-run                # показать, что попадёт в пакет при установке с GitHub
 ```
 
 Дизайн-заметки: [docs/specs/design.md](docs/specs/design.md), релиз 1.1: [docs/specs/2026-10-24-v1.1-module-design.md](docs/specs/2026-10-24-v1.1-module-design.md). Описание алгоритма: [docs/algorithm.md](docs/algorithm.md).
