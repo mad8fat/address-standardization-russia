@@ -1,0 +1,218 @@
+{
+  "description": "Синтетические кейсы на правила классификации, не покрытые реальными ответами геокодера",
+  "cases": [
+    {
+      "input": "г. Киров, ул. Ленина, 12",
+      "candidates": [
+        {
+          "kind": "house",
+          "precision": "exact",
+          "text": "",
+          "province": [
+            "Приволжский федеральный округ",
+            "Кировская область"
+          ],
+          "area": "",
+          "locality": "Киров",
+          "street": "улица Ленина",
+          "house": "12",
+          "lat": 55,
+          "lon": 37
+        },
+        {
+          "kind": "house",
+          "precision": "exact",
+          "text": "",
+          "province": [
+            "Центральный федеральный округ",
+            "Калужская область"
+          ],
+          "area": "",
+          "locality": "Киров",
+          "street": "улица Ленина",
+          "house": "12",
+          "lat": 55,
+          "lon": 37
+        }
+      ],
+      "expected": {
+        "status": "Город не подтверждён",
+        "anchor": "locality"
+      }
+    },
+    {
+      "input": "Московская обл., ул. Ленина, 12",
+      "candidates": [
+        {
+          "kind": "house",
+          "precision": "exact",
+          "text": "",
+          "province": [
+            "Центральный федеральный округ",
+            "Московская область"
+          ],
+          "area": "",
+          "locality": "Подольск",
+          "street": "улица Ленина",
+          "house": "12",
+          "lat": 55,
+          "lon": 37
+        },
+        {
+          "kind": "house",
+          "precision": "exact",
+          "text": "",
+          "province": [
+            "Центральный федеральный округ",
+            "Московская область"
+          ],
+          "area": "",
+          "locality": "Химки",
+          "street": "улица Ленина",
+          "house": "12",
+          "lat": 55,
+          "lon": 37
+        },
+        {
+          "kind": "house",
+          "precision": "exact",
+          "text": "",
+          "province": [
+            "Центральный федеральный округ",
+            "Московская область"
+          ],
+          "area": "",
+          "locality": "Клин",
+          "street": "улица Ленина",
+          "house": "12",
+          "lat": 55,
+          "lon": 37
+        }
+      ],
+      "expected": {
+        "status": "Город не указан",
+        "anchor": "province"
+      }
+    },
+    {
+      "input": "ул. Красная Поляна, 5",
+      "candidates": [
+        {
+          "kind": "house",
+          "precision": "exact",
+          "text": "",
+          "province": [
+            "Центральный федеральный округ",
+            "Москва"
+          ],
+          "area": "",
+          "locality": "Москва",
+          "street": "Краснополянская улица",
+          "house": "5",
+          "lat": 55,
+          "lon": 37
+        },
+        {
+          "kind": "house",
+          "precision": "exact",
+          "text": "",
+          "province": [
+            "Южный федеральный округ",
+            "Краснодарский край"
+          ],
+          "area": "",
+          "locality": "Красная Поляна",
+          "street": "улица Защитников Кавказа",
+          "house": "5",
+          "lat": 55,
+          "lon": 37
+        }
+      ],
+      "expected": {
+        "status": "Город не указан",
+        "anchor": null,
+        "reordered": false
+      }
+    },
+    {
+      "input": "Московская обл, ул. Заречная, 5",
+      "candidates": [
+        {
+          "kind": "house",
+          "precision": "exact",
+          "text": "",
+          "province": [
+            "Центральный федеральный округ",
+            "Московская область"
+          ],
+          "area": "",
+          "locality": "",
+          "street": "Речная улица",
+          "house": "5",
+          "lat": 55,
+          "lon": 37
+        },
+        {
+          "kind": "house",
+          "precision": "exact",
+          "text": "",
+          "province": [
+            "Центральный федеральный округ",
+            "Московская область"
+          ],
+          "area": "",
+          "locality": "Заречная",
+          "street": "Центральная улица",
+          "house": "5",
+          "lat": 55,
+          "lon": 37
+        }
+      ],
+      "expected": {
+        "status": "Город не указан",
+        "anchor": "province",
+        "reordered": false
+      }
+    },
+    {
+      "input": "Ростов-на-Дону, Будённовский пр., 1",
+      "candidates": [
+        {
+          "kind": "house",
+          "precision": "exact",
+          "text": "",
+          "province": [
+            "Центральный федеральный округ",
+            "Ярославская область"
+          ],
+          "area": "",
+          "locality": "Ростов",
+          "street": "Будённовский проспект",
+          "house": "1",
+          "lat": 55,
+          "lon": 37
+        },
+        {
+          "kind": "house",
+          "precision": "exact",
+          "text": "",
+          "province": [
+            "Южный федеральный округ",
+            "Ростовская область"
+          ],
+          "area": "",
+          "locality": "Ростов-на-Дону",
+          "street": "улица Пушкинская",
+          "house": "99",
+          "lat": 55,
+          "lon": 37
+        }
+      ],
+      "expected": {
+        "status": "Город не указан",
+        "anchor": null,
+        "reordered": false
+      }
+    }
+  ]
+}

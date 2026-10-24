@@ -63,10 +63,8 @@ test('street name never confirms a same-named city, district or region', () => {
     assert.equal(core.matchAnchor('г. Киров, ул. Кирова, 5', house('Киров', ['Приволжский федеральный округ', 'Кировская область'], 'улица Кирова', '5')), 'locality');
 });
 
+// регион и несколько городов («Московская обл.» с тремя городами) — в tests/vectors/rules.json
 test('only a region or district in the input does not confirm an address found in several towns', () => {
-    const mo = ['Центральный федеральный округ', 'Московская область'];
-    const cands = [house('Подольск', mo, 'улица Ленина', '12'), house('Химки', mo, 'улица Ленина', '12'), house('Клин', mo, 'улица Ленина', '12')];
-    assert.equal(core.classify('Московская обл., ул. Ленина, 12', cands).status, S().NO_CITY);
     const yar = ['Центральный федеральный округ', 'Ярославская область'];
     const area = [house('посёлок Щедрино', yar, 'улица Ленина', '5', { area: 'Ярославский район' }),
                   house('посёлок Ивняки', yar, 'улица Ленина', '5', { area: 'Ярославский район' })];
@@ -78,7 +76,7 @@ test('only a region or district in the input does not confirm an address found i
 test('a town name shared by several regions needs the region in the input', () => {
     const kirov1 = house('Киров', ['Приволжский федеральный округ', 'Кировская область'], 'улица Ленина', '12');
     const kirov2 = house('Киров', ['Центральный федеральный округ', 'Калужская область'], 'улица Ленина', '12');
-    assert.equal(core.classify('г. Киров, ул. Ленина, 12', [kirov1, kirov2]).status, S().CITY_UNCONFIRMED);
+    // без региона во входе («г. Киров, ул. Ленина, 12») — «Город не подтверждён», кейс в tests/vectors/rules.json
     assert.equal(core.classify('Кировская обл, г. Киров, ул. Ленина, 12', [kirov1, kirov2]).status, S().CONFIRMED);
     assert.equal(core.classify('г. Киров, ул. Ленина, 12', [kirov1]).status, S().CONFIRMED);
 });
