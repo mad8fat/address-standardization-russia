@@ -105,3 +105,41 @@ test('classify confirms an abbreviated city against the full candidate name', ()
     const rnd = house('Ростов-на-Дону', ['Южный федеральный округ', 'Ростовская область'], 'Будённовский проспект', '1');
     assert.equal(core.classify('Ростов н/Д, Будённовский пр., 1', [rnd]).status, S().CONFIRMED);
 });
+
+const RND = () => house('Ростов-на-Дону', ['Южный федеральный округ', 'Ростовская область'], 'Будённовский проспект', '1', { lat: 47.22, lon: 39.71 });
+const ROSTOV = () => house('Ростов', ['Центральный федеральный округ', 'Ярославская область'], 'Будённовский проспект', '1', { lat: 57.18, lon: 39.41 });
+
+test('compoundNames finds hyphenated multi-word names and ignores numeric ones', () => {
+    assert.deepEqual(core.compoundNames('Ростов-на-Дону, Будённовский пр., 1'), [['ростов', 'дону']]);
+    assert.deepEqual(core.compoundNames('г. Москва, ул. Тверская, 10-12, д. 10-А, корп. 28-31'), []);
+    assert.deepEqual(core.compoundNames('Санкт-Петербург, Невский пр., 28'), [['санкт', 'петербург']]);
+});
+
+test('a hyphenated compound in the input is not confirmed by a candidate covering only part of it', () => {
+    const r = core.classify('Ростов-на-Дону, Будённовский пр., 1', [ROSTOV()]);
+    assert.equal(r.status, S().CITY_UNCONFIRMED);
+    assert.equal(r.anchor, null);
+    assert.equal(core.classify('Москва-Сити, Пресненская наб., 12', [house('Москва', ['Центральный федеральный округ', 'Москва'], 'Пресненская набережная', '12')]).status, S().CITY_UNCONFIRMED);
+    assert.equal(core.classify('Комсомольск-на-Амуре, пр. Ленина, 1', [house('Комсомольск', ['Центральный федеральный округ', 'Ивановская область'], 'проспект Ленина', '1')]).status, S().CITY_UNCONFIRMED);
+});
+
+test('a longer matching locality later in the list becomes the top and confirms', () => {
+    const r = core.classify('Ростов-на-Дону, Будённовский пр., 1', [ROSTOV(), RND()]);
+    assert.equal(r.status, S().CONFIRMED);
+    assert.equal(r.top.locality, 'Ростов-на-Дону');
+    assert.equal(r.reordered, true);
+    assert.equal(r.candidateCount, 2);
+});
+
+test('a longer matching locality that is not a house blocks the locality anchor of the top', () => {
+    const notHouse = { ...RND(), kind: 'locality', house: '', street: '' };
+    const r = core.classify('Ростов на Дону, Будённовский пр., 1', [ROSTOV(), notHouse]);
+    assert.equal(r.status, S().CITY_UNCONFIRMED);
+    assert.equal(r.reordered, false);
+});
+
+test('numeric hyphenated tokens and ordinary confirmed addresses are unaffected', () => {
+    const msk = house('Москва', ['Центральный федеральный округ', 'Москва'], 'Тверская улица', '10');
+    assert.equal(core.classify('г. Москва, ул. Тверская, 10-12', [msk]).status, S().CONFIRMED);
+    assert.equal(core.classify('г. Москва, ул. Тверская, 10-12', [msk]).reordered, false);
+});

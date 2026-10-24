@@ -1,0 +1,183 @@
+{
+  "description": "Составные названия через дефис: часть названия не подтверждает целое, более длинное совпадение предпочитается",
+  "cases": [
+    {
+      "input": "Ростов-на-Дону, Будённовский пр., 1",
+      "candidates": [
+        {
+          "kind": "house",
+          "precision": "exact",
+          "text": "",
+          "province": [
+            "Центральный федеральный округ",
+            "Ярославская область"
+          ],
+          "area": "",
+          "locality": "Ростов",
+          "street": "Будённовский проспект",
+          "house": "1",
+          "lat": 57.18,
+          "lon": 39.41
+        }
+      ],
+      "expected": {
+        "status": "Город не подтверждён",
+        "anchor": null
+      }
+    },
+    {
+      "input": "Москва-Сити, Пресненская наб., 12",
+      "candidates": [
+        {
+          "kind": "house",
+          "precision": "exact",
+          "text": "",
+          "province": [
+            "Центральный федеральный округ",
+            "Москва"
+          ],
+          "area": "",
+          "locality": "Москва",
+          "street": "Пресненская набережная",
+          "house": "12",
+          "lat": 55,
+          "lon": 37
+        }
+      ],
+      "expected": {
+        "status": "Город не подтверждён",
+        "anchor": null
+      }
+    },
+    {
+      "input": "Комсомольск-на-Амуре, пр. Ленина, 1",
+      "candidates": [
+        {
+          "kind": "house",
+          "precision": "exact",
+          "text": "",
+          "province": [
+            "Центральный федеральный округ",
+            "Ивановская область"
+          ],
+          "area": "",
+          "locality": "Комсомольск",
+          "street": "проспект Ленина",
+          "house": "1",
+          "lat": 55,
+          "lon": 37
+        }
+      ],
+      "expected": {
+        "status": "Город не подтверждён",
+        "anchor": null
+      }
+    },
+    {
+      "input": "Ростов-на-Дону, Будённовский пр., 1",
+      "candidates": [
+        {
+          "kind": "house",
+          "precision": "exact",
+          "text": "",
+          "province": [
+            "Центральный федеральный округ",
+            "Ярославская область"
+          ],
+          "area": "",
+          "locality": "Ростов",
+          "street": "Будённовский проспект",
+          "house": "1",
+          "lat": 57.18,
+          "lon": 39.41
+        },
+        {
+          "kind": "house",
+          "precision": "exact",
+          "text": "",
+          "province": [
+            "Южный федеральный округ",
+            "Ростовская область"
+          ],
+          "area": "",
+          "locality": "Ростов-на-Дону",
+          "street": "Будённовский проспект",
+          "house": "1",
+          "lat": 47.22,
+          "lon": 39.71
+        }
+      ],
+      "expected": {
+        "status": "Подтверждён",
+        "anchor": "locality",
+        "topLocality": "Ростов-на-Дону",
+        "reordered": true
+      }
+    },
+    {
+      "input": "Ростов на Дону, Будённовский пр., 1",
+      "candidates": [
+        {
+          "kind": "house",
+          "precision": "exact",
+          "text": "",
+          "province": [
+            "Центральный федеральный округ",
+            "Ярославская область"
+          ],
+          "area": "",
+          "locality": "Ростов",
+          "street": "Будённовский проспект",
+          "house": "1",
+          "lat": 57.18,
+          "lon": 39.41
+        },
+        {
+          "kind": "locality",
+          "precision": "exact",
+          "text": "",
+          "province": [
+            "Южный федеральный округ",
+            "Ростовская область"
+          ],
+          "area": "",
+          "locality": "Ростов-на-Дону",
+          "street": "",
+          "house": "",
+          "lat": 47.22,
+          "lon": 39.71
+        }
+      ],
+      "expected": {
+        "status": "Город не подтверждён",
+        "anchor": null,
+        "reordered": false
+      }
+    },
+    {
+      "input": "г. Москва, ул. Тверская, 10-12",
+      "candidates": [
+        {
+          "kind": "house",
+          "precision": "exact",
+          "text": "",
+          "province": [
+            "Центральный федеральный округ",
+            "Москва"
+          ],
+          "area": "",
+          "locality": "Москва",
+          "street": "Тверская улица",
+          "house": "10",
+          "lat": 55,
+          "lon": 37
+        }
+      ],
+      "expected": {
+        "status": "Подтверждён",
+        "anchor": "locality",
+        "reordered": false
+      }
+    }
+  ]
+}

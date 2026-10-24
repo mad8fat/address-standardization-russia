@@ -140,20 +140,62 @@ function anchorPool(input, c) {
     return new Set(AddrCore.tokenize(input).filter(t => !streetTokens.has(t)));
 }
 
-function levelMatches(level, c, pool) {
+// Составные названия через дефис во входе («Ростов-на-Дону», «Москва-Сити»): для каждого дефисного
+// слова — его значимые слова, если их не меньше двух и в каждом есть буква. Номера вида «10-12»,
+// «10-А», «28-31» составными не считаются.
+AddrCore.compoundNames = function (input) {
+    const out = [];
+    for (const word of AddrCore.expandCityAbbreviations(input).split(/[^а-яёa-z0-9-]+/i)) {
+        if (!word.includes('-')) continue;
+        const toks = AddrCore.tokenize(word);
+        if (toks.length >= 2 && toks.every(t => /[а-яa-z]/.test(t))) out.push(toks);
+    }
+    return out;
+};
+
+// Составное название из входа неделимо: если название кандидата задевает хотя бы одно его слово,
+// оно обязано содержать все («Ростов» не подтверждает «Ростов-на-Дону»).
+function compoundsCovered(toks, compounds) {
+    return (compounds || []).every(cmp => !cmp.some(t => toks.includes(t)) || cmp.every(t => toks.includes(t)));
+}
+
+function levelMatches(level, c, pool, compounds) {
     const names = level === 'province' ? (c.province || []) : [c[level]];
-    return names.some(name => { const toks = AddrCore.tokenize(name); return toks.length > 0 && tokensMatch(toks, pool); });
+    return names.some(name => {
+        const toks = AddrCore.tokenize(name);
+        return toks.length > 0 && tokensMatch(toks, pool) && compoundsCovered(toks, compounds);
+    });
+}
+
+// Уровень привязки: locality → area → province, иначе null. skipLocality — когда среди кандидатов
+// есть более длинное совпадающее название, и город верхнего кандидата подтверждать нельзя.
+function anchorLevel(input, c, { compounds, skipLocality }) {
+    const pool = anchorPool(input, c);
+    for (const level of ['locality', 'area', 'province']) {
+        if (level === 'locality' && skipLocality) continue;
+        if (levelMatches(level, c, pool, compounds)) return level;
+    }
+    return null;
 }
 
 // На каком уровне исходная строка подтверждает кандидата: locality → area → province, иначе null.
 AddrCore.matchAnchor = function (input, c) {
     input = AddrCore.expandCityAbbreviations(input);
-    const pool = anchorPool(input, c);
-    for (const level of ['locality', 'area', 'province']) {
-        if (levelMatches(level, c, pool)) return level;
+    return anchorLevel(input, c, { compounds: AddrCore.compoundNames(input), skipLocality: false });
+};
+
+// Первый кандидат (любого вида), чей населённый пункт целиком назван во входе с учётом составных
+// названий и состоит из большего числа слов, чем у верхнего («Ростов-на-Дону» длиннее «Ростова»).
+// pool — слова входа без улицы верхнего кандидата: название улицы из строки не должно
+// «находить» СНТ или посёлок с таким же словом в названии.
+function longerLocalityMatch(cands, top, pool, compounds) {
+    const topLength = AddrCore.tokenize(top.locality).length;
+    for (const c of cands) {
+        const toks = AddrCore.tokenize(c.locality);
+        if (toks.length > topLength && tokensMatch(toks, pool) && compoundsCovered(toks, compounds)) return c;
     }
     return null;
-};
+}
 
 function localityKey(c) { return (c.province || []).join('/') + '|' + (c.locality || ''); }
 
@@ -179,26 +221,40 @@ function sameNameInOtherRegions(top, cands) {
 AddrCore.classify = function (input, cands) {
     input = AddrCore.expandCityAbbreviations(input);
     cands = cands || [];
-    const top = cands.length ? cands[0] : null;
+    let top = cands.length ? cands[0] : null;
+    let reordered = false;
     const candidateCount = AddrCore.countDistinctLocalities(cands);
     if (!AddrCore.isHouse(top)) {
-        return { status: AddrCore.STATUS.NO_HOUSE, anchor: null, candidateCount, top };
+        return { status: AddrCore.STATUS.NO_HOUSE, anchor: null, candidateCount, top, reordered };
     }
-    const anchor = AddrCore.matchAnchor(input, top);
+    const compounds = AddrCore.compoundNames(input);
+    // более длинное совпадающее название ниже по списку: дом — становится верхним,
+    // не дом — запрещает подтверждать город верхнего кандидата
+    let skipLocality = false;
+    const better = longerLocalityMatch(cands, top, anchorPool(input, top), compounds);
+    if (better && AddrCore.isHouse(better)) {
+        cands = [better, ...cands.filter(c => c !== better)];
+        top = better;
+        reordered = true;
+    } else if (better) {
+        skipLocality = true;
+    }
+    const anchor = anchorLevel(input, top, { compounds, skipLocality });
     const S = AddrCore.STATUS;
+    const result = status => ({ status, anchor, candidateCount, top, reordered });
     if (anchor === 'locality') {
         // город назван, но таких городов несколько и регион в строке не указан
-        if (sameNameInOtherRegions(top, cands) && !levelMatches('province', top, anchorPool(input, top))) {
-            return { status: S.CITY_UNCONFIRMED, anchor, candidateCount, top };
+        if (sameNameInOtherRegions(top, cands) && !levelMatches('province', top, anchorPool(input, top), compounds)) {
+            return result(S.CITY_UNCONFIRMED);
         }
-        return { status: S.CONFIRMED, anchor, candidateCount, top };
+        return result(S.CONFIRMED);
     }
     if (anchor) {
         // в строке только район или регион: подтверждаем, если дом нашёлся в одном населённом пункте
-        return { status: candidateCount >= 2 ? S.NO_CITY : S.CONFIRMED, anchor, candidateCount, top };
+        return result(candidateCount >= 2 ? S.NO_CITY : S.CONFIRMED);
     }
-    if (candidateCount >= 2) return { status: S.NO_CITY, anchor, candidateCount, top };
-    return { status: S.CITY_UNCONFIRMED, anchor, candidateCount, top };
+    if (candidateCount >= 2) return result(S.NO_CITY);
+    return result(S.CITY_UNCONFIRMED);
 };
 
 // ---- Входные данные -------------------------------------------------------
