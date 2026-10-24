@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadCore } from './load-core.mjs';
-import { fixture, toCandidate } from './helpers.mjs';
+import { vector } from './helpers.mjs';
 
 const core = loadCore();
 
@@ -75,8 +75,8 @@ test('parseCoords accepts dots, decimal commas and spaces, rejects garbage and o
 });
 
 test('buildRecord fills a confirmed record from the top candidate', () => {
-    const r = fixture('full.json').find(r => r.input.includes('Г. Екатеринбург'));
-    const cands = r.results.map(toCandidate);
+    const r = vector('confirmed.json').cases.find(r => r.input.includes('Г. Екатеринбург'));
+    const cands = r.candidates;
     const cls = core.classify(r.input, cands);
     const rec = core.buildRecord({ original: r.input, label: 'Офис 1', cands, cls });
     assert.equal(rec.status, core.STATUS.CONFIRMED);
@@ -98,8 +98,8 @@ test('buildRecord fills a confirmed record from the top candidate', () => {
 });
 
 test('buildRecord for an ambiguous address lists candidates and leaves the guessed city empty', () => {
-    const r = fixture('incomplete.json').find(r => r.input === 'улица Ленина, 12');
-    const cands = r.results.map(toCandidate);
+    const r = vector('no-city.json').cases.find(r => r.input === 'улица Ленина, 12');
+    const cands = r.candidates;
     const rec = core.buildRecord({ original: r.input, label: '', cands, cls: core.classify(r.input, cands) });
     assert.equal(rec.status, core.STATUS.NO_CITY);
     assert.ok(rec.candidatesText.startsWith('Киров; Ижевск; Благовещенск'));
@@ -128,8 +128,8 @@ test('recordToExportRow follows EXPORT_HEADERS order', () => {
     assert.deepEqual(core.EXPORT_HEADERS, ['№', 'Исходный адрес', 'Метка', 'Федеральный округ', 'Регион',
         'Населённый пункт', 'Улица и дом', 'Итоговый адрес', 'Координаты', 'Яндекс Карты', '2ГИС',
         'Статус', 'Точность', 'Проверка', 'Кандидаты']);
-    const r = fixture('full.json').find(r => r.input.includes('Г. Екатеринбург'));
-    const cands = r.results.map(toCandidate);
+    const r = vector('confirmed.json').cases.find(r => r.input.includes('Г. Екатеринбург'));
+    const cands = r.candidates;
     const rec = core.buildRecord({ original: r.input, label: '', cands, cls: core.classify(r.input, cands) });
     const row = core.recordToExportRow(rec, 0);
     assert.equal(row.length, 15);

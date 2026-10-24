@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { loadCore } from './load-core.mjs';
-import { fixture, toCandidate, house } from './helpers.mjs';
+import { fixture, vector, house } from './helpers.mjs';
 
 const core = loadCore();
 const S = () => core.STATUS;
@@ -36,34 +36,15 @@ test('empty response gives no candidates and status NO_HOUSE', () => {
     assert.equal(r.top, null);
 });
 
-test('classify: every address without a city from the public set is flagged, never confirmed', () => {
-    const data = fixture('incomplete.json');
-    assert.equal(data.length, 18);
-    for (const r of data) {
-        const got = core.classify(r.input, r.results.map(toCandidate));
-        const expected = r.input.includes('бизнес-центр') ? S().NO_HOUSE : S().NO_CITY;
-        assert.equal(got.status, expected, `${r.input} → ${got.status} (anchor=${got.anchor}, n=${got.candidateCount})`);
-    }
-});
-
-test('classify: every full public address is confirmed', () => {
-    const data = fixture('full.json');
-    assert.equal(data.length, 26);
-    for (const r of data) {
-        const got = core.classify(r.input, r.results.map(toCandidate));
-        assert.equal(got.status, S().CONFIRMED, `${r.input} → ${got.status} (anchor=${got.anchor}, n=${got.candidateCount})`);
-    }
-});
-
 test('matchAnchor reports the level at which the input confirms the candidate', () => {
-    const full = fixture('full.json');
-    const top = s => { const r = full.find(r => r.input.includes(s)); return [r.input, toCandidate(r.results[0])]; };
+    const full = vector('confirmed.json').cases;
+    const top = s => { const r = full.find(r => r.input.includes(s)); return [r.input, r.candidates[0]]; };
     assert.equal(core.matchAnchor(...top('Г. Екатеринбург, пр-кт Ленина')), 'locality');
     assert.equal(core.matchAnchor(...top('Иваново г, Революции пл')), 'area');       // у дома нет locality, есть округ
     assert.equal(core.matchAnchor(...top('Усть-Ордынский п')), 'locality');
     assert.equal(core.matchAnchor(...top('г. Орёл')), 'locality');                    // ё → е
-    const mosk = fixture('incomplete.json').find(r => r.input === 'ул. Мира, 15');
-    assert.equal(core.matchAnchor(mosk.input, toCandidate(mosk.results[0])), null);
+    const mosk = vector('no-city.json').cases.find(r => r.input === 'ул. Мира, 15');
+    assert.equal(core.matchAnchor(mosk.input, mosk.candidates[0]), null);
 });
 
 test('street name never confirms a same-named city, district or region', () => {
@@ -110,8 +91,8 @@ test('kind=other without a house number is not a house', () => {
 });
 
 test('countDistinctLocalities counts house-level candidates by region+locality', () => {
-    const lenina = fixture('incomplete.json').find(r => r.input === 'улица Ленина, 12');
-    assert.equal(core.countDistinctLocalities(lenina.results.map(toCandidate)), 10);
-    const ekb = fixture('full.json').find(r => r.input.includes('Г. Екатеринбург'));
-    assert.equal(core.countDistinctLocalities(ekb.results.map(toCandidate)), 1);
+    const lenina = vector('no-city.json').cases.find(r => r.input === 'улица Ленина, 12');
+    assert.equal(core.countDistinctLocalities(lenina.candidates), 10);
+    const ekb = vector('confirmed.json').cases.find(r => r.input.includes('Г. Екатеринбург'));
+    assert.equal(core.countDistinctLocalities(ekb.candidates), 1);
 });

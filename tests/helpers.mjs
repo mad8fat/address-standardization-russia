@@ -6,6 +6,8 @@ const here = path.dirname(fileURLToPath(import.meta.url));
 
 export const fixture = name => JSON.parse(readFileSync(path.join(here, 'fixtures', name), 'utf8'));
 
+export const vector = name => JSON.parse(readFileSync(path.join(here, 'vectors', name), 'utf8'));
+
 // Плоские фикстуры (results[] с province «A / B») → Candidate
 export function toCandidate(p) {
     const [lon, lat] = String(p.pos).split(' ').map(Number);
