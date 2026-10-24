@@ -167,3 +167,32 @@ test('region-level anchoring needs every non-street compound of the input covere
     assert.equal(len.status, S().CONFIRMED);
     assert.equal(len.anchor, 'province');
 });
+
+// Кандидат ниже по списку — не выбор геокодера: его дом продвигается, только если улица названа во входе.
+const KRASNAYA_POLYANA = () => [
+    house('Москва', ['Центральный федеральный округ', 'Москва'], 'Краснополянская улица', '5'),
+    house('Красная Поляна', ['Южный федеральный округ', 'Краснодарский край'], 'улица Защитников Кавказа', '5')
+];
+const ZARECHNAYA = () => {
+    const mo = ['Центральный федеральный округ', 'Московская область'];
+    return [house('', mo, 'Речная улица', '5'), house('Заречная', mo, 'Центральная улица', '5')];
+};
+const ROSTOV_OTHER_STREET = () => [ROSTOV(), house('Ростов-на-Дону', ['Южный федеральный округ', 'Ростовская область'], 'улица Пушкинская', '99')];
+
+test('a longer locality whose street is not named in the input is not promoted', () => {
+    const a1 = core.classify('ул. Красная Поляна, 5', KRASNAYA_POLYANA());
+    assert.equal(a1.status, S().NO_CITY);
+    assert.equal(a1.anchor, null);
+    assert.equal(a1.reordered, false);
+    const a3 = core.classify('Московская обл, ул. Заречная, 5', ZARECHNAYA());
+    assert.notEqual(a3.status, S().CONFIRMED);
+    assert.equal(a3.status, S().NO_CITY);
+    assert.equal(a3.anchor, 'province');
+    assert.equal(a3.reordered, false);
+    // оба кандидата — дома в разных городах, привязки нет: срабатывает ветка «несколько городов»
+    const g = core.classify('Ростов-на-Дону, Будённовский пр., 1', ROSTOV_OTHER_STREET());
+    assert.notEqual(g.status, S().CONFIRMED);
+    assert.equal(g.status, S().NO_CITY);
+    assert.equal(g.anchor, null);
+    assert.equal(g.reordered, false);
+});

@@ -260,11 +260,18 @@ AddrCore.classify = function (input, cands) {
         return { status: AddrCore.STATUS.NO_HOUSE, anchor: null, candidateCount, top, reordered };
     }
     const words = inputWords(input);
-    // более длинное совпадающее название ниже по списку: дом — становится верхним,
-    // не дом — запрещает подтверждать город верхнего кандидата
+    // более длинное совпадающее название ниже по списку: дом, чья улица названа во входе, становится
+    // верхним; иначе (не дом или улица не названа) — запрещает подтверждать город верхнего кандидата.
+    // Улица обязательна: кандидат ниже по списку — не выбор геокодера, и одного совпадения города
+    // мало, нужно отдельное подтверждение («ул. Красная Поляна, 5» не находит дом в Красной Поляне).
     let skipLocality = false;
     const better = longerLocalityMatch(cands, top, anchorPool(input, top), words);
-    if (better && AddrCore.isHouse(better)) {
+    const allWords = new Set(AddrCore.tokenize(input));
+    const streetNamed = c => {
+        const st = AddrCore.tokenize(c.street);
+        return st.length > 0 && st.every(t => allWords.has(t));
+    };
+    if (better && AddrCore.isHouse(better) && streetNamed(better)) {
         cands = [better, ...cands.filter(c => c !== better)];
         top = better;
         reordered = true;
