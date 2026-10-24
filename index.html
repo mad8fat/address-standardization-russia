@@ -194,7 +194,11 @@
                     <div class="status-line" id="apiKeyStatus"><span class="dot"></span><span>Ключ не задан</span></div>
                     <a class="hint" href="https://developer.tech.yandex.ru/services/" target="_blank" rel="noopener">Где взять ключ?</a>
                 </div>
-                <p class="hint">Ключ хранится только в вашем браузере и отправляется только в Яндекс.</p>
+                <div class="row between">
+                    <label class="hint" style="display:flex;gap:6px;align-items:center"><input type="checkbox" id="rememberKey" checked> Запоминать ключ в этом браузере</label>
+                    <button class="btn btn-outline" id="forgetKeyBtn" type="button" disabled>Забыть ключ</button>
+                </div>
+                <p class="hint">Ключ отправляется только в Яндекс. С включённой галочкой он сохраняется в этом браузере, без неё живёт до закрытия вкладки.</p>
             </div>
         </section>
 
@@ -346,6 +350,7 @@
 // Состояние страницы и работа с DOM.
 const App = {
     apiKey: '',
+    rememberKey: true,
     mode: 'auto',          // auto | doubtful | manual
     items: [],             // {original, label}
     records: [],           // Record из AddrCore.buildRecord (null — ещё не обработан)
@@ -360,6 +365,7 @@ const App = {
 App.review = { index: -1, queue: null, queuePos: 0, fromLoop: false, selected: null, openedAt: 0, returnTo: 'done' };
 
 const KEY_STORAGE = 'addrstd.apiKey';
+const REMEMBER_STORAGE = 'addrstd.rememberKey';
 const MAX_FILE_BYTES = 10 * 1024 * 1024;
 const MAX_ROWS = 10000;
 const REQUEST_TIMEOUT_MS = 20000;
@@ -391,13 +397,22 @@ function showView(name) {
 
 function setApiKey(key) {
     App.apiKey = String(key || '').trim();
-    try { if (App.apiKey) localStorage.setItem(KEY_STORAGE, App.apiKey); else localStorage.removeItem(KEY_STORAGE); } catch (e) { /* приватный режим */ }
     const ok = App.apiKey.length > 0;
+    // в localStorage ключ кладём только при включённом «Запоминать ключ»
+    try { if (ok && App.rememberKey) localStorage.setItem(KEY_STORAGE, App.apiKey); else localStorage.removeItem(KEY_STORAGE); } catch (e) { /* приватный режим */ }
     $('apiKeyStatus').className = 'status-line' + (ok ? ' ok' : '');
     $('apiKeyStatus').lastElementChild.textContent = ok ? 'Ключ задан' : 'Ключ не задан';
     $('keyPill').className = 'key-pill' + (ok ? ' ok' : '');
     $('keyPillText').textContent = ok ? 'Ключ API: задан' : 'Ключ API: не задан';
+    $('forgetKeyBtn').disabled = !ok;
     updateStartButton();
+}
+
+// Переключатель «Запоминать ключ»: сохраняем выбор и сразу кладём ключ в localStorage или убираем его
+function setRememberKey(flag) {
+    App.rememberKey = !!flag;
+    try { localStorage.setItem(REMEMBER_STORAGE, App.rememberKey ? '1' : '0'); } catch (e) { /* приватный режим */ }
+    setApiKey(App.apiKey);
 }
 
 // Обработка приостановлена с необработанным остатком (лимит или «Остановить»): продолжать, а не начинать заново.
@@ -480,7 +495,13 @@ function switchTab(which) {
 
 function initShell() {
     let saved = '';
-    try { saved = localStorage.getItem(KEY_STORAGE) || ''; } catch (e) { /* нет localStorage */ }
+    try {
+        saved = localStorage.getItem(KEY_STORAGE) || '';
+        App.rememberKey = localStorage.getItem(REMEMBER_STORAGE) !== '0';
+    } catch (e) { /* нет localStorage */ }
+    $('rememberKey').checked = App.rememberKey;
+    $('rememberKey').addEventListener('change', e => setRememberKey(e.target.checked));
+    $('forgetKeyBtn').addEventListener('click', () => { $('apiKeyInput').value = ''; setApiKey(''); });
     $('apiKeyInput').value = saved;
     setApiKey(saved);
     $('apiKeyInput').addEventListener('input', e => setApiKey(e.target.value));
