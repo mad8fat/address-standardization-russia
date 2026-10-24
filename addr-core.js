@@ -32,6 +32,27 @@ AddrCore.tokenize = function (s) {
         .filter(t => t.length >= 3 && !AddrCore.STOP_WORDS.has(t));
 };
 
+// Сокращения городов, которые геокодер возвращает полным названием.
+// Раскрываем только по границам слов, чтобы не задеть «Омск», «Томск» и «Ростовская обл».
+// «Влг» намеренно нет: Волгоград и Вологда неразличимы.
+function cityAbbreviation(body, full) {
+    return { re: new RegExp('(?<![а-яёa-z])(?:' + body.source + ')(?![а-яёa-z])', 'gi'), full };
+}
+AddrCore.CITY_ABBREVIATIONS = [
+    cityAbbreviation(/спб|с\.?\s*-?\s*петербург|санкт\s+петербург/, 'Санкт-Петербург'),
+    cityAbbreviation(/н\.?\s*новгород/, 'Нижний Новгород'),
+    cityAbbreviation(/ростов[\s-]*(?:на|н)[\s./-]*д(?:ону)?/, 'Ростов-на-Дону'),
+    cityAbbreviation(/екб|е-бург/, 'Екатеринбург'),
+    cityAbbreviation(/мск/, 'Москва'),
+    cityAbbreviation(/нск|н-ск/, 'Новосибирск')
+];
+
+AddrCore.expandCityAbbreviations = function (s) {
+    let out = String(s || '');
+    for (const { re, full } of AddrCore.CITY_ABBREVIATIONS) out = out.replace(re, full);
+    return out;
+};
+
 // Маркеры помещения: всё, что идёт от них и дальше, геокодеру не нужно.
 AddrCore.PREMISES_MARKER = /(^|[\s,;(])(пом|помещ|помещение|кв|офис|оф|этаж|литера|лит|вход|подъезд|а\/я|павильон)(?=\.|\s|$|№|\d)/i;
 
@@ -48,7 +69,8 @@ function trimTrailingSeparators(s) {
 // Сегмент с маркером обрезается, идущие за ним чисто номерные сегменты выбрасываются,
 // а сегменты со словами (например, город в конце строки) остаются.
 AddrCore.cleanAddressForQuery = function (raw) {
-    const segments = String(raw || '').slice(0, AddrCore.MAX_ADDRESS_LENGTH).split(',').map(x => x.trim()).filter(Boolean);
+    raw = AddrCore.expandCityAbbreviations(String(raw || '').slice(0, AddrCore.MAX_ADDRESS_LENGTH));
+    const segments = raw.split(',').map(x => x.trim()).filter(Boolean);
     const kept = [];
     let dropNumeric = false;
     for (const seg of segments) {
@@ -125,6 +147,7 @@ function levelMatches(level, c, pool) {
 
 // На каком уровне исходная строка подтверждает кандидата: locality → area → province, иначе null.
 AddrCore.matchAnchor = function (input, c) {
+    input = AddrCore.expandCityAbbreviations(input);
     const pool = anchorPool(input, c);
     for (const level of ['locality', 'area', 'province']) {
         if (levelMatches(level, c, pool)) return level;
@@ -154,6 +177,7 @@ function sameNameInOtherRegions(top, cands) {
 
 // Итог проверки одного адреса.
 AddrCore.classify = function (input, cands) {
+    input = AddrCore.expandCityAbbreviations(input);
     cands = cands || [];
     const top = cands.length ? cands[0] : null;
     const candidateCount = AddrCore.countDistinctLocalities(cands);

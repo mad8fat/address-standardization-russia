@@ -96,3 +96,12 @@ test('countDistinctLocalities counts house-level candidates by region+locality',
     const ekb = vector('confirmed.json').cases.find(r => r.input.includes('Г. Екатеринбург'));
     assert.equal(core.countDistinctLocalities(ekb.candidates), 1);
 });
+
+test('classify confirms an abbreviated city against the full candidate name', () => {
+    const spb = house('Санкт-Петербург', ['Северо-Западный федеральный округ', 'Санкт-Петербург'], 'Невский проспект', '28');
+    const r = core.classify('СПб, Невский пр., 28', [spb]);
+    assert.equal(r.status, S().CONFIRMED);
+    assert.equal(r.anchor, 'locality');
+    const rnd = house('Ростов-на-Дону', ['Южный федеральный округ', 'Ростовская область'], 'Будённовский проспект', '1');
+    assert.equal(core.classify('Ростов н/Д, Будённовский пр., 1', [rnd]).status, S().CONFIRMED);
+});
