@@ -3,6 +3,8 @@
 // Ищет ключи API (UUID) и запрещённые слова. Режимы:
 //   node scripts/check-clean.mjs           — рабочее дерево (все файлы, кроме .git и node_modules)
 //   node scripts/check-clean.mjs --staged  — содержимое индекса (то, что реально уйдёт в коммит)
+// Файлы xlsx/xlsm/docx (zip) сканируются изнутри: текст xml-вхождений проверяется построчно,
+// нечитаемый архив считается нарушением (zip-unreadable).
 // Сторонние файлы из vendor/ не сканируются построчно, но их SHA-256 должен совпасть с закреплённым.
 // Шаблоны слов собираются из кодов символов, чтобы этот файл сам их не содержал.
 import { readdirSync, readFileSync, statSync } from 'node:fs';
@@ -10,12 +12,14 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { zipTextEntries } from './zip-text.mjs';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const selfRel = 'scripts/check-clean.mjs';
 const staged = process.argv.includes('--staged');
 const SKIP_DIRS = new Set(['.git', 'node_modules']);
-const BINARY_EXT = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.xlsx', '.xls', '.pdf', '.woff', '.woff2', '.ttf']);
+const BINARY_EXT = new Set(['.png', '.jpg', '.jpeg', '.gif', '.webp', '.ico', '.xls', '.pdf', '.woff', '.woff2', '.ttf']);
+const ZIP_EXT = new Set(['.xlsx', '.xlsm', '.docx']);
 
 // Закреплённые хеши сторонних файлов: подмена содержимого ловится, построчный скан не нужен.
 const VENDOR_SHA256 = {
@@ -92,6 +96,16 @@ for (const file of staged ? walkIndex() : walkTree()) {
     if (Object.hasOwn(VENDOR_SHA256, file.rel)) {
         const sha = createHash('sha256').update(file.read()).digest('hex');
         if (sha !== VENDOR_SHA256[file.rel]) report(file.rel, 0, 'vendor-hash-mismatch');
+        continue;
+    }
+    if (ZIP_EXT.has(path.extname(file.rel).toLowerCase())) {
+        let entries;
+        try { entries = zipTextEntries(file.read()); } catch (e) { report(file.rel, 0, 'zip-unreadable'); continue; }
+        for (const entry of entries) {
+            entry.text.split(/\r?\n/).forEach((line, i) => {
+                for (const p of PATTERNS) if (p.re.test(line)) report(file.rel + '!' + entry.name, i + 1, p.name);
+            });
+        }
         continue;
     }
     if (BINARY_EXT.has(path.extname(file.rel).toLowerCase())) continue;
